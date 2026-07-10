@@ -201,6 +201,7 @@ window.refreshProfilesList = async () => {
     if (list) list.innerHTML = '';
     
     const res = await apiCall('get_all');
+    alert("SERVER RESPONSE: " + JSON.stringify(res));
     if (spinner) spinner.classList.add('d-none');
     
     if (res.status === 'success') {
