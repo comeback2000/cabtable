@@ -35,18 +35,62 @@
     <nav class="navbar navbar-expand-lg glass-nav sticky-top">
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold gradient-text" href="#"><i class="fa-solid fa-chart-line me-2"></i>EquitySim</a>
-            <div class="d-flex align-items-center gap-2">
-                <!-- Dedicated Actions -->
+            <div class="d-flex align-items-center gap-2" id="navDashboardActions" style="display:none!important">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.showProfileSelector()"><i class="fa-solid fa-arrow-left me-1"></i>Profiles</button>
+                <span class="text-muted small fw-semibold" id="navCurrentProfile"></span>
                 <button class="btn btn-success shadow-sm fw-bold px-3" onclick="window.forceSaveProfile()"><i class="fa-solid fa-floppy-disk me-2"></i>Save</button>
-                <button class="btn btn-outline-info shadow-sm" data-bs-toggle="modal" data-bs-target="#loadProfileModal" onclick="window.refreshProfilesList()"><i class="fa-solid fa-folder-open me-2"></i>Load Profiles</button>
-                <button class="btn btn-outline-warning shadow-sm" id="resetDataBtn" title="Reset to Demo"><i class="fa-solid fa-rotate-right"></i></button>
-                
-                <!-- Settings & Theme -->
                 <button class="btn btn-outline-secondary shadow-sm ms-2" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings"><i class="fa-solid fa-gear"></i></button>
                 <button class="btn btn-primary shadow-sm" id="themeToggle" title="Toggle Theme"><i class="fa-solid fa-moon"></i></button>
             </div>
+            <div class="d-flex align-items-center gap-2" id="navProfileSelectorActions">
+                <button class="btn btn-outline-secondary shadow-sm ms-2" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings"><i class="fa-solid fa-gear"></i></button>
+                <button class="btn btn-primary shadow-sm" id="themeToggle2" title="Toggle Theme"><i class="fa-solid fa-moon"></i></button>
+            </div>
         </div>
     </nav>
+
+    <!-- Profile Selector Screen -->
+    <div id="profileSelectorScreen" class="d-none">
+        <div class="container py-5" style="max-width:900px">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold gradient-text"><i class="fa-solid fa-building me-2"></i>Company Profiles</h2>
+                <p class="text-muted">Select a saved profile to open it, or create a new one.</p>
+            </div>
+            <div id="profileCardsContainer" class="row g-4 mb-4"></div>
+            <div class="text-center">
+                <button class="btn btn-success btn-lg shadow fw-bold px-5" onclick="window.createNewProfile()">
+                    <i class="fa-solid fa-plus me-2"></i>Create New Profile
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Profile Screen -->
+    <div id="createProfileScreen" class="d-none">
+        <div class="container py-5" style="max-width:500px">
+            <div class="text-center mb-4">
+                <h2 class="fw-bold gradient-text"><i class="fa-solid fa-plus-circle me-2"></i>New Company Profile</h2>
+                <p class="text-muted">Enter the company name to get started.</p>
+            </div>
+            <div class="card glass-card border-0 shadow-lg p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Company Name</label>
+                    <input type="text" id="newProfileNameInput" class="form-control form-control-lg" placeholder="e.g. GOEV2, Acme Corp..." autofocus>
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success btn-lg fw-bold" onclick="window.startNewProfile()">
+                        <i class="fa-solid fa-rocket me-2"></i>Create & Open
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="window.showProfileSelector()">
+                        <i class="fa-solid fa-arrow-left me-1"></i>Back to Profiles
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard (hidden until profile selected) -->
+    <div id="mainDashboard" class="d-none">
 
     <!-- Sticky Summary Bar -->
     <div class="summary-bar sticky-summary shadow-sm py-3 mb-4">
@@ -331,11 +375,11 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div><!-- end settings modal -->
+    </div><!-- end mainDashboard -->
 
-    <!-- Bootstrap & Chart.js JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmxc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js?v=10"></script>
+    <script src="script.js?v=11"></script>
 </body>
 </html>

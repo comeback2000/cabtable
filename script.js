@@ -114,24 +114,124 @@ const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwWK1BhEZuftp
 let adminSessionPassword = '';
 let savedProfilesCache = {};
 
+// Screens: loginOverlay, profileSelectorScreen, createProfileScreen, mainDashboard
+function showScreen(screenId) {
+    ['profileSelectorScreen','createProfileScreen','mainDashboard'].forEach(id => {
+        document.getElementById(id).classList.add('d-none');
+    });
+    const navDash = document.getElementById('navDashboardActions');
+    const navSel  = document.getElementById('navProfileSelectorActions');
+    if (screenId === 'mainDashboard') {
+        navDash.style.removeProperty('display'); navDash.classList.remove('d-none');
+        navSel.classList.add('d-none');
+    } else {
+        navDash.style.display = 'none';
+        navSel.classList.remove('d-none');
+    }
+    if (screenId) document.getElementById(screenId).classList.remove('d-none');
+}
+
 // Initialization & Data Loading
 function init() {
-    // Show login overlay by default
     document.getElementById('loginOverlay').classList.remove('d-none');
-    
-    // Load demo data by default behind the scenes
-    state = JSON.parse(JSON.stringify(demoData));
-    state.totalShares = 10000000;
-    state.esopPool = 35;
-    
     setupEventListeners();
-    renderAll();
-    
+
     // Theme setup
     const savedTheme = localStorage.getItem('equitySimTheme') || 'dark';
     document.documentElement.setAttribute('data-bs-theme', savedTheme);
     updateThemeIcon(savedTheme);
 }
+
+// Called after successful login
+function afterLogin() {
+    document.getElementById('loginOverlay').classList.add('d-none');
+    window.showProfileSelector();
+}
+
+// Show the profile selector (or create screen if no profiles)
+window.showProfileSelector = () => {
+    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    const names = Object.keys(profiles);
+    const container = document.getElementById('profileCardsContainer');
+
+    if (names.length === 0) {
+        // No profiles saved — go straight to create screen
+        showScreen('createProfileScreen');
+        return;
+    }
+
+    // Build profile cards
+    container.innerHTML = '';
+    names.forEach(name => {
+        const profileData = profiles[name];
+        const stage = profileData.stage || 'N/A';
+        const currency = profileData.currency || '₹';
+        const founders = (profileData.founders || []).length;
+        const rounds = (profileData.fundingRounds || []).length;
+
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-sm-6';
+        col.innerHTML = `
+            <div class="card glass-card border-0 shadow h-100 p-4" style="cursor:pointer" onclick="window.openProfile('${name}')">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-1">${name}</h5>
+                        <span class="badge bg-primary">${stage}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();window.deleteProfile('${name}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+                <div class="text-muted small">
+                    <div><i class="fa-solid fa-users me-2 text-info"></i>${founders} Founder(s)</div>
+                    <div class="mt-1"><i class="fa-solid fa-money-bill-wave me-2 text-success"></i>${rounds} Funding Round(s)</div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary w-100 fw-semibold" onclick="event.stopPropagation();window.openProfile('${name}')">
+                        <i class="fa-solid fa-folder-open me-2"></i>Open
+                    </button>
+                </div>
+            </div>`;
+        container.appendChild(col);
+    });
+    showScreen('profileSelectorScreen');
+};
+
+// Open a profile from the selector
+window.openProfile = (name) => {
+    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    if (!profiles[name]) return;
+    state = profiles[name];
+    savedProfilesCache = profiles;
+    document.getElementById('navCurrentProfile').textContent = name;
+    showScreen('mainDashboard');
+    renderAll();
+};
+
+// Show create new profile screen
+window.createNewProfile = () => {
+    document.getElementById('newProfileNameInput').value = '';
+    showScreen('createProfileScreen');
+};
+
+// Start a brand new blank profile
+window.startNewProfile = () => {
+    const name = document.getElementById('newProfileNameInput').value.trim();
+    if (!name) { alert('Please enter a company name.'); return; }
+    state = {
+        companyName: name, currency: '₹', stage: 'Idea',
+        founders: [], esopPool: 10, fundingRounds: [],
+        totalShares: 10000000, exitValuation: 10000000000
+    };
+    // Save immediately to localStorage
+    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    profiles[name] = JSON.parse(JSON.stringify(state));
+    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+    savedProfilesCache = profiles;
+    document.getElementById('navCurrentProfile').textContent = name;
+    showScreen('mainDashboard');
+    renderAll();
+};
 
 // Global API Helper
 async function apiCall(action, payload = {}) {
@@ -159,34 +259,33 @@ function saveState() {
 }
 
 // Global Save Profile Function
-window.forceSaveProfile = async () => {
-    const cName = document.getElementById('companyName').value.trim();
-    if (!cName) {
-        alert("Please enter a Company Name first.");
-        return;
-    }
+window.forceSaveProfile = () => {
+    const cName = document.getElementById('companyName').value.trim() || state.companyName;
+    if (!cName) { alert('Please enter a Company Name first.'); return; }
     state.companyName = cName;
 
-    // 1. Save to localStorage immediately (always works)
-    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-    localProfiles[cName] = JSON.parse(JSON.stringify(state));
-    localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
-    savedProfilesCache = localProfiles;
+    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    profiles[cName] = JSON.parse(JSON.stringify(state));
+    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+    savedProfilesCache = profiles;
+    document.getElementById('navCurrentProfile').textContent = cName;
 
-    alert(`Profile "${cName}" saved locally! Also syncing to Google Sheets...`);
+    // Show visual feedback
+    const btn = document.querySelector('[onclick="window.forceSaveProfile()"]');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check me-2"></i>Saved!';
+    btn.classList.replace('btn-success','btn-outline-success');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-outline-success','btn-success'); }, 2000);
 
-    // 2. Also sync to Google Sheets in background
-    try {
-        if (adminSessionPassword) {
-            const res = await apiCall('save_profile', { profileName: cName, data: state });
-            if (res.status !== 'success') {
-                console.warn('Google Sheets sync failed:', res.message);
-            }
-        }
-    } catch (err) {
-        console.warn('Google Sheets sync error:', err);
+    // Sync to Google Sheets in background (no await, no blocking)
+    if (adminSessionPassword) {
+        apiCall('save_profile', { profileName: cName, data: state }).catch(()=>{});
     }
 };
+
+// refreshProfilesList now just shows the selector screen
+window.refreshProfilesList = () => window.showProfileSelector();
+
 
 // Show toast message
 function showToast(message = "Data saved successfully!") {
@@ -199,33 +298,20 @@ function showToast(message = "Data saved successfully!") {
 }
 
 // Global function to refresh profiles list
-window.refreshProfilesList = () => {
-    const list = document.getElementById('profileList');
-    if (!list) return;
+window.refreshProfilesList = () => window.showProfileSelector();
 
-    // Load from localStorage (always instant, always works)
-    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-    savedProfilesCache = localProfiles;
-    const names = Object.keys(localProfiles);
+// Load a specific profile by name
+window.loadProfile = (name) => window.openProfile(name);
 
-    if (names.length === 0) {
-        list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles saved yet. Enter a Company Name above and click the green Save button.</div>';
-        return;
-    }
-
-    list.innerHTML = '';
-    names.forEach(name => {
-        const li = document.createElement('li');
-        li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
-        li.innerHTML = `
-            <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-info"></i>${name}</div>
-            <div>
-                <button class="btn btn-sm btn-primary me-2" onclick="window.loadProfile('${name}')">Load</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="window.deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
-            </div>
-        `;
-        list.appendChild(li);
-    });
+// Delete a profile
+window.deleteProfile = (name) => {
+    if (!confirm(`Delete profile "${name}"?`)) return;
+    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    delete profiles[name];
+    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+    savedProfilesCache = profiles;
+    if (adminSessionPassword) apiCall('delete_profile', { profileName: name }).catch(()=>{});
+    window.showProfileSelector();
 };
 
 // Event Listeners Setup
@@ -241,11 +327,9 @@ function setupEventListeners() {
         
         const res = await apiCall('login', { password: pwd });
         
-        if (res.status === 'success') {
+    if (res.status === 'success') {
             adminSessionPassword = pwd;
-            document.getElementById('loginOverlay').classList.add('d-none');
-            // Auto-load profiles in background
-            window.refreshProfilesList();
+            afterLogin();
         } else {
             err.textContent = "Incorrect password";
             err.classList.remove('d-none');
