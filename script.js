@@ -173,7 +173,7 @@ window.forceSaveProfile = async () => {
         
         if (res.status === 'success') {
             alert(`SUCCESS! Your profile '${cName}' has been permanently saved to your Google Sheet!`);
-            try { refreshProfilesList(); } catch(e){}
+            try { window.refreshProfilesList(); } catch(e){ console.error(e); }
         } else {
             alert("SERVER ERROR: Could not save profile. " + res.message);
         }
@@ -259,6 +259,14 @@ function setupEventListeners() {
         btn.innerHTML = 'Login';
         btn.disabled = false;
     });
+
+    // Auto-refresh profiles every time the Load Profiles modal is opened
+    const loadProfileModalEl = document.getElementById('loadProfileModal');
+    if (loadProfileModalEl) {
+        loadProfileModalEl.addEventListener('show.bs.modal', () => {
+            window.refreshProfilesList();
+        });
+    }
 
     // Change Password
     document.getElementById('btnChangePassword').addEventListener('click', async () => {
