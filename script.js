@@ -160,25 +160,31 @@ function saveState() {
 
 // Global Save Profile Function
 window.forceSaveProfile = async () => {
-    alert("Save button clicked! Preparing to send data to Google Sheets...");
-    
-    const cName = state.companyName;
+    // Read directly from the DOM input - don't trust state which may not be updated yet
+    const cName = document.getElementById('companyName').value.trim();
     if (!cName) {
-        alert("Action Cancelled: Please enter a Company Name before saving the profile.");
+        alert("Please enter a Company Name first.");
+        return;
+    }
+    if (!adminSessionPassword) {
+        alert("You are not logged in. Please refresh the page and log in again.");
         return;
     }
     
+    // Update state too
+    state.companyName = cName;
+    
+    const payload = { profileName: cName, data: state };
+    
     try {
-        const res = await apiCall('save_profile', { profileName: cName, data: state });
-        
+        const res = await apiCall('save_profile', payload);
         if (res.status === 'success') {
-            alert(`SUCCESS! Your profile '${cName}' has been permanently saved to your Google Sheet!`);
-            try { window.refreshProfilesList(); } catch(e){ console.error(e); }
+            alert(`Profile "${cName}" saved! Click Load Profiles to see it.`);
         } else {
-            alert("SERVER ERROR: Could not save profile. " + res.message);
+            alert("Save FAILED: " + res.message);
         }
     } catch (err) {
-        alert("CRITICAL ERROR: Failed to communicate with Google Sheets. Check your internet or adblocker. " + err.message);
+        alert("Network error saving profile: " + err.message);
     }
 };
 
@@ -192,45 +198,48 @@ function showToast(message = "Data saved successfully!") {
     }
 }
 
-// Global function to refresh profiles
+// Global function to refresh profiles list
 window.refreshProfilesList = async () => {
     const spinner = document.getElementById('profileLoadingSpinner');
     const list = document.getElementById('profileList');
     
-    if (spinner) spinner.classList.remove('d-none');
-    if (list) list.innerHTML = '';
+    if (!list) return;
+    
+    list.innerHTML = '<div class="p-4 text-center text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading from Google Sheets...</div>';
     
     const res = await apiCall('get_all');
-    if (spinner) spinner.classList.add('d-none');
     
-    if (res.status === 'success') {
-        // DETECT IF OLD APPS SCRIPT IS STILL RUNNING
-        if (res.profiles === undefined) {
-            if (list) list.innerHTML = '<div class="p-4 text-center text-danger fw-bold">ERROR: Your Google Apps Script is still running the old code! Please go back to Google Apps Script, make sure you PASTE the new code, click the SAVE icon (Ctrl+S), and THEN deploy a New Version.</div>';
-            return;
-        }
-        
-        savedProfilesCache = res.profiles;
-        const names = Object.keys(savedProfilesCache);
-        
-        if (names.length === 0) {
-            if (list) list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles found. Save a profile first.</div>';
-            return;
-        }
-        
-        names.forEach(name => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
-            li.innerHTML = `
-                <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-secondary"></i>${name}</div>
-                <div>
-                    <button class="btn btn-sm btn-primary me-2" onclick="window.loadProfile('${name}')">Load</button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="window.deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            `;
-            if (list) list.appendChild(li);
-        });
+    if (res.status !== 'success') {
+        list.innerHTML = `<div class="p-4 text-center text-danger small">Error loading profiles: ${res.message || 'Unknown error'}</div>`;
+        return;
     }
+    
+    if (!res.profiles) {
+        list.innerHTML = '<div class="p-4 text-center text-danger small">Google Apps Script is running old code. Please update and redeploy it.</div>';
+        return;
+    }
+    
+    savedProfilesCache = res.profiles;
+    const names = Object.keys(savedProfilesCache);
+    
+    if (names.length === 0) {
+        list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles saved yet. Enter a Company Name and click Save.</div>';
+        return;
+    }
+    
+    list.innerHTML = '';
+    names.forEach(name => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
+        li.innerHTML = `
+            <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-info"></i>${name}</div>
+            <div>
+                <button class="btn btn-sm btn-primary me-2" onclick="window.loadProfile('${name}')">Load</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="window.deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        `;
+        list.appendChild(li);
+    });
 };
 
 // Event Listeners Setup

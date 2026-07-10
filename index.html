@@ -38,7 +38,7 @@
             <div class="d-flex align-items-center gap-2">
                 <!-- Dedicated Actions -->
                 <button class="btn btn-success shadow-sm fw-bold px-3" onclick="window.forceSaveProfile()"><i class="fa-solid fa-floppy-disk me-2"></i>Save</button>
-                <button class="btn btn-outline-info shadow-sm" data-bs-toggle="modal" data-bs-target="#loadProfileModal"><i class="fa-solid fa-folder-open me-2"></i>Load Profiles</button>
+                <button class="btn btn-outline-info shadow-sm" data-bs-toggle="modal" data-bs-target="#loadProfileModal" onclick="window.refreshProfilesList()"><i class="fa-solid fa-folder-open me-2"></i>Load Profiles</button>
                 <button class="btn btn-outline-warning shadow-sm" id="resetDataBtn" title="Reset to Demo"><i class="fa-solid fa-rotate-right"></i></button>
                 
                 <!-- Settings & Theme -->
@@ -336,6 +336,6 @@
     <!-- Bootstrap & Chart.js JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmxc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js?v=8"></script>
+    <script src="script.js?v=9"></script>
 </body>
 </html>
