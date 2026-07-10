@@ -631,33 +631,66 @@ function renderFounders() {
         div.className = 'row g-2 mb-2 align-items-center fade-in';
         div.innerHTML = `
             <div class="col-4">
-                <input type="text" class="form-control form-control-sm" value="${founder.name}" placeholder="Name" onchange="updateFounder('${founder.id}', 'name', this.value)">
+                <input type="text" class="form-control form-control-sm" 
+                    value="${founder.name.replace(/"/g,'&quot;')}" 
+                    placeholder="Name" 
+                    data-founder-id="${founder.id}" data-field="name"
+                    oninput="window.updateFounderField(this)">
             </div>
             <div class="col-4">
-                <input type="text" class="form-control form-control-sm" value="${founder.role}" placeholder="Role" onchange="updateFounder('${founder.id}', 'role', this.value)">
+                <input type="text" class="form-control form-control-sm" 
+                    value="${founder.role.replace(/"/g,'&quot;')}" 
+                    placeholder="Role" 
+                    data-founder-id="${founder.id}" data-field="role"
+                    oninput="window.updateFounderField(this)">
             </div>
             <div class="col-3">
                 <div class="input-group input-group-sm">
-                    <input type="number" class="form-control" value="${founder.ownershipPercent}" onchange="updateFounder('${founder.id}', 'ownershipPercent', this.value)" step="0.1">
+                    <input type="number" class="form-control" 
+                        value="${founder.ownershipPercent}" 
+                        data-founder-id="${founder.id}" data-field="ownershipPercent"
+                        onchange="window.updateFounderField(this)" 
+                        oninput="window.updateFounderField(this)" 
+                        step="0.1" min="0" max="100">
                     <span class="input-group-text">%</span>
                 </div>
             </div>
             <div class="col-1 text-end">
-                <button class="btn btn-sm btn-outline-danger" onclick="removeFounder('${founder.id}')"><i class="fa-solid fa-trash"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="window.removeFounder('${founder.id}')"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
         list.appendChild(div);
     });
 }
 
-// Global functions for inline event handlers
+// Update a founder field directly from input element (no re-render of founder list)
+window.updateFounderField = (inputEl) => {
+    const id = inputEl.dataset.founderId;
+    const field = inputEl.dataset.field;
+    const value = inputEl.value;
+    const founder = state.founders.find(f => f.id === id);
+    if (!founder) return;
+    if (field === 'ownershipPercent') {
+        founder[field] = parseFloat(value) || 0;
+    } else {
+        founder[field] = value;
+    }
+    // Recalculate and update summary/cap table/charts WITHOUT re-rendering founder inputs
+    const capTableData = calculateCapTable();
+    renderSummaryBar(capTableData);
+    renderCapTable(capTableData);
+    renderCharts(capTableData);
+};
+
 window.updateFounder = (id, field, value) => {
     const founder = state.founders.find(f => f.id === id);
-    if(founder) {
-        if(field === 'ownershipPercent') founder[field] = parseInputToNumber(value);
+    if (founder) {
+        if (field === 'ownershipPercent') founder[field] = parseInputToNumber(value);
         else founder[field] = value;
-        renderAll();
-        saveState();
+        const capTableData = calculateCapTable();
+        renderSummaryBar(capTableData);
+        renderCapTable(capTableData);
+        renderCharts(capTableData);
     }
 };
 
