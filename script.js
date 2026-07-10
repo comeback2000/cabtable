@@ -148,11 +148,51 @@ function afterLogin() {
     window.showProfileSelector();
 }
 
-// Show the profile selector (or create screen if no profiles)
-window.showProfileSelector = () => {
-    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-    const names = Object.keys(profiles);
+// Show the profile selector (fetches from Google Sheets first, fallback to localStorage)
+window.showProfileSelector = async () => {
     const container = document.getElementById('profileCardsContainer');
+    if (!container) return;
+
+    // Show a loading spinner first in the container
+    container.innerHTML = `
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3 text-muted">Fetching profiles from Google Sheets...</p>
+        </div>
+    `;
+    showScreen('profileSelectorScreen');
+
+    let profiles = {};
+    let isOffline = false;
+
+    // Try fetching from Google Sheets
+    if (adminSessionPassword) {
+        try {
+            const res = await apiCall('get_all');
+            if (res && res.status === 'success' && res.profiles) {
+                profiles = res.profiles;
+                // Sync local storage with Google Sheets data
+                localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+            } else {
+                isOffline = true;
+            }
+        } catch (e) {
+            console.error("Failed to fetch profiles from Cloud", e);
+            isOffline = true;
+        }
+    } else {
+        isOffline = true;
+    }
+
+    // Fallback to localStorage if offline or fetch failed
+    if (isOffline) {
+        profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    }
+
+    savedProfilesCache = profiles;
+    const names = Object.keys(profiles);
 
     if (names.length === 0) {
         // No profiles saved — go straight to create screen
@@ -162,6 +202,20 @@ window.showProfileSelector = () => {
 
     // Build profile cards
     container.innerHTML = '';
+    
+    if (isOffline && adminSessionPassword) {
+        // Show an offline warning badge
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'col-12 mb-3';
+        warningDiv.innerHTML = `
+            <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning d-flex align-items-center mb-0" role="alert">
+                <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                <div>Offline Mode: Displaying locally cached profiles. Connect to the internet to sync with Google Sheets.</div>
+            </div>
+        `;
+        container.appendChild(warningDiv);
+    }
+
     names.forEach(name => {
         const profileData = profiles[name];
         const stage = profileData.stage || 'N/A';
@@ -194,7 +248,6 @@ window.showProfileSelector = () => {
             </div>`;
         container.appendChild(col);
     });
-    showScreen('profileSelectorScreen');
 };
 
 // Open a profile from the selector
@@ -215,22 +268,39 @@ window.createNewProfile = () => {
 };
 
 // Start a brand new blank profile
-window.startNewProfile = () => {
+window.startNewProfile = async () => {
     const name = document.getElementById('newProfileNameInput').value.trim();
     if (!name) { alert('Please enter a company name.'); return; }
+    
+    // Check local/cached profiles to avoid unintended overwrites
+    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    if (localProfiles[name]) {
+        if (!confirm(`A profile named "${name}" already exists. Overwrite it?`)) return;
+    }
+
     state = {
         companyName: name, currency: '₹', stage: 'Idea',
         founders: [], esopPool: 10, fundingRounds: [],
         totalShares: 10000000, exitValuation: 10000000000
     };
-    // Save immediately to localStorage
-    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-    profiles[name] = JSON.parse(JSON.stringify(state));
-    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
-    savedProfilesCache = profiles;
+
+    // Save locally immediately
+    localProfiles[name] = JSON.parse(JSON.stringify(state));
+    localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
+    savedProfilesCache = localProfiles;
     document.getElementById('navCurrentProfile').textContent = name;
+    
     showScreen('mainDashboard');
     renderAll();
+
+    // Sync to cloud in background
+    if (adminSessionPassword) {
+        try {
+            await apiCall('save_profile', { profileName: name, data: state });
+        } catch (e) {
+            console.warn("Background cloud sync failed on creation", e);
+        }
+    }
 };
 
 // Global API Helper
@@ -259,27 +329,50 @@ function saveState() {
 }
 
 // Global Save Profile Function
-window.forceSaveProfile = () => {
+window.forceSaveProfile = async () => {
     const cName = document.getElementById('companyName').value.trim() || state.companyName;
     if (!cName) { alert('Please enter a Company Name first.'); return; }
     state.companyName = cName;
 
+    // Show visual saving feedback on the button
+    const btn = document.querySelector('[onclick="window.forceSaveProfile()"]');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+    btn.disabled = true;
+
+    // 1. Save to local storage cache immediately
     const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
     profiles[cName] = JSON.parse(JSON.stringify(state));
     localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
     savedProfilesCache = profiles;
     document.getElementById('navCurrentProfile').textContent = cName;
 
-    // Show visual feedback
-    const btn = document.querySelector('[onclick="window.forceSaveProfile()"]');
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-check me-2"></i>Saved!';
-    btn.classList.replace('btn-success','btn-outline-success');
-    setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-outline-success','btn-success'); }, 2000);
-
-    // Sync to Google Sheets in background (no await, no blocking)
-    if (adminSessionPassword) {
-        apiCall('save_profile', { profileName: cName, data: state }).catch(()=>{});
+    // 2. Save to Google Sheets (awaited so we can report cloud save success)
+    try {
+        if (adminSessionPassword) {
+            const res = await apiCall('save_profile', { profileName: cName, data: state });
+            if (res && res.status === 'success') {
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-2"></i>Saved to Cloud!';
+                btn.classList.replace('btn-success', 'btn-outline-success');
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    btn.classList.replace('btn-outline-success', 'btn-success');
+                    btn.disabled = false;
+                }, 2000);
+            } else {
+                alert("Saved locally, but Cloud sync failed: " + (res.message || 'Unknown response'));
+                btn.innerHTML = orig;
+                btn.disabled = false;
+            }
+        } else {
+            alert("Saved locally. Log in to sync with Cloud.");
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
+    } catch (err) {
+        alert("Saved locally. Cloud sync failed (Network error).");
+        btn.innerHTML = orig;
+        btn.disabled = false;
     }
 };
 
