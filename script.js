@@ -316,7 +316,7 @@ window.deleteProfile = (name) => {
 
 // Event Listeners Setup
 function setupEventListeners() {
-    document.getElementById('loginBtn').addEventListener('click', async () => {
+    document.getElementById('loginBtn')?.addEventListener('click', async () => {
         const pwd = document.getElementById('loginPassword').value;
         const btn = document.getElementById('loginBtn');
         const err = document.getElementById('loginError');
@@ -327,7 +327,7 @@ function setupEventListeners() {
         
         const res = await apiCall('login', { password: pwd });
         
-    if (res.status === 'success') {
+        if (res.status === 'success') {
             adminSessionPassword = pwd;
             afterLogin();
         } else {
@@ -348,7 +348,7 @@ function setupEventListeners() {
     }
 
     // Change Password
-    document.getElementById('btnChangePassword').addEventListener('click', async () => {
+    document.getElementById('btnChangePassword')?.addEventListener('click', async () => {
         const oldP = document.getElementById('settingsOldPassword').value;
         const newP = document.getElementById('settingsNewPassword').value;
         const msg = document.getElementById('passwordChangeMsg');
@@ -387,44 +387,21 @@ function setupEventListeners() {
         btn.innerHTML = 'Update Password';
     });
 
-    // Global functions for profile modal actions
-    window.loadProfile = (name) => {
-        if (savedProfilesCache[name]) {
-            state = savedProfilesCache[name];
-            renderAll();
-            // Close modal
-            const modalEl = document.getElementById('loadProfileModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-            showToast(`Loaded profile: ${name}`);
-        }
-    };
-    
-    window.deleteProfile = async (name) => {
-        if (confirm(`Delete profile "${name}"?`)) {
-            // Remove from localStorage
-            const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-            delete localProfiles[name];
-            localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
-            savedProfilesCache = localProfiles;
-            // Also delete from Google Sheets in background
-            try { if (adminSessionPassword) apiCall('delete_profile', { profileName: name }); } catch(e){}
-            window.refreshProfilesList();
-        }
-    };
-
-    // Theme Toggle
-    document.getElementById('themeToggle').addEventListener('click', () => {
+    // Theme Toggle Handler
+    const handleThemeToggle = () => {
         const currentTheme = document.documentElement.getAttribute('data-bs-theme');
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-bs-theme', newTheme);
         localStorage.setItem('equitySimTheme', newTheme);
         updateThemeIcon(newTheme);
         renderCharts(); // Re-render charts for theme colors
-    });
+    };
+
+    document.getElementById('themeToggle')?.addEventListener('click', handleThemeToggle);
+    document.getElementById('themeToggle2')?.addEventListener('click', handleThemeToggle);
 
     // Reset Data
-    document.getElementById('resetDataBtn').addEventListener('click', () => {
+    document.getElementById('resetDataBtn')?.addEventListener('click', () => {
         if(confirm("Are you sure you want to reset all data to the demo defaults?")) {
             localStorage.removeItem('equitySimState');
             state = JSON.parse(JSON.stringify(demoData));
@@ -435,8 +412,8 @@ function setupEventListeners() {
     });
 
     // Company Inputs
-    document.getElementById('companyName').addEventListener('input', (e) => { state.companyName = e.target.value; saveState(); });
-    document.getElementById('currencySelect').addEventListener('change', (e) => { 
+    document.getElementById('companyName')?.addEventListener('input', (e) => { state.companyName = e.target.value; saveState(); });
+    document.getElementById('currencySelect')?.addEventListener('change', (e) => { 
         const oldCurrency = state.currency;
         const newCurrency = e.target.value;
         state.currency = newCurrency; 
@@ -464,7 +441,7 @@ function setupEventListeners() {
         renderAll(); 
         saveState(); 
     });
-    document.getElementById('stageSelect').addEventListener('change', (e) => {
+    document.getElementById('stageSelect')?.addEventListener('change', (e) => {
         state.stage = e.target.value;
         // Set default valuation for the selected stage
         const defaultVal = getDefaultValuation(state.stage);
@@ -484,112 +461,13 @@ function setupEventListeners() {
     });
     
     // ESOP
-    document.getElementById('esopInput').addEventListener('input', (e) => {
+    document.getElementById('esopInput')?.addEventListener('input', (e) => {
         state.esopPool = parseInputToNumber(e.target.value);
         renderAll();
         saveState();
     });
 
-    // Add Founder
-    document.getElementById('addFounderBtn').addEventListener('click', () => {
-        state.founders.push({ id: generateId(), name: `Founder ${state.founders.length + 1}`, role: '', ownershipPercent: 0 });
-        renderAll();
-        saveState();
-    });
-
-    // Add Funding Round
-    document.getElementById('addRoundBtn').addEventListener('click', () => {
-        let defaultName = 'New Round';
-        const rounds = state.fundingRounds.length;
-        if (rounds === 0) defaultName = 'Pre-Seed';
-        else if (rounds === 1) defaultName = 'Seed';
-        else if (rounds === 2) defaultName = 'Series A';
-        else if (rounds === 3) defaultName = 'Series B';
-        else if (rounds === 4) defaultName = 'Series C';
-
-        // Set a sensible default pre-money based on round name
-        const roundValuations = {
-            'Pre-Seed': 30000000,
-            'Seed':     150000000,
-            'Series A': 500000000,
-            'Series B': 2000000000,
-            'Series C': 8000000000,
-        };
-        // For the first round, use stage-based default if INR
-        let defaultPreMoney = roundValuations[defaultName] || 50000000;
-        if (rounds === 0 && state.currency === '₹') {
-            const stageDefault = getDefaultValuation(state.stage);
-            if (stageDefault) defaultPreMoney = stageDefault;
-        }
-
-        state.fundingRounds.push({
-            id: generateId(), name: defaultName,
-            raiseAmount: 0, preMoney: defaultPreMoney,
-            postMoney: defaultPreMoney, equitySold: 0
-        });
-        renderAll();
-        saveState();
-    });
-
-    // Auto-Simulate Rounds
-    document.getElementById('autoSimulateBtn').addEventListener('click', () => {
-        if(state.fundingRounds.length === 0) {
-            alert("Please add at least one funding round first.");
-            return;
-        }
-        
-        if(state.fundingRounds.length > 1) {
-            if(confirm("Do you want to clear all subsequent rounds and simulate a fresh timeline starting from the FIRST round? (Click OK to simulate from Pre-Seed, Cancel to simulate from the last round)")) {
-                state.fundingRounds = [state.fundingRounds[0]];
-            }
-        }
-        
-        let targetValuation = state.exitValuation;
-        let multiplierElement = document.getElementById('simulateMultiplier');
-        let multiplier = multiplierElement ? (parseFloat(multiplierElement.value) || 10) : 10;
-        
-        while (true) {
-            let lastRound = state.fundingRounds[state.fundingRounds.length - 1];
-            let currentValuation = lastRound.postMoney;
-            let currentRaise = lastRound.raiseAmount;
-            
-            if (currentRaise === 0) {
-                alert("Please ensure the last round has a Raise Amount before simulating.");
-                break;
-            }
-            
-            if (currentValuation >= targetValuation) {
-                break;
-            }
-
-            const nextRaise = currentRaise * multiplier;
-            const nextEquitySold = 15; // Standard 15% dilution for simulated rounds
-            const nextPostMoney = nextRaise / (nextEquitySold / 100);
-            const nextPreMoney = nextPostMoney - nextRaise;
-            
-            let rounds = state.fundingRounds.length;
-            let nextName = 'Round ' + (rounds + 1);
-            const roundNames = ['Series A', 'Series B', 'Series C', 'Series D', 'Series E', 'Series F', 'IPO'];
-            if(rounds === 0) nextName = 'Pre-Seed';
-            else if(rounds === 1) nextName = 'Seed';
-            else if(rounds <= roundNames.length + 1) nextName = roundNames[rounds - 2];
-            
-            state.fundingRounds.push({
-                id: generateId(),
-                name: nextName,
-                raiseAmount: nextRaise,
-                preMoney: nextPreMoney,
-                postMoney: nextPostMoney,
-                equitySold: nextEquitySold
-            });
-            
-            // Failsafe
-            if (state.fundingRounds.length > 12) break;
-        }
-        
-        renderAll();
-        saveState();
-    });
+    // Add Founder, Add Funding Round, and Auto-Simulate are handled via global window.addFounder(), window.addRound(), and window.autoSimulate() inline onclick functions to avoid DOM errors.
 
     // Exit Valuation Input
     document.getElementById('exitValuationInput').addEventListener('input', (e) => {
@@ -628,6 +506,119 @@ window.addFounder = () => {
     state.founders.push({ id: generateId(), name: `Founder ${state.founders.length + 1}`, role: '', ownershipPercent: 0 });
     renderAll();
     saveState();
+};
+
+// Global Add Funding Round
+window.addRound = () => {
+    let defaultName = 'New Round';
+    const rounds = state.fundingRounds.length;
+    if (rounds === 0) defaultName = 'Pre-Seed';
+    else if (rounds === 1) defaultName = 'Seed';
+    else if (rounds === 2) defaultName = 'Series A';
+    else if (rounds === 3) defaultName = 'Series B';
+    else if (rounds === 4) defaultName = 'Series C';
+
+    // Set a sensible default pre-money based on round name
+    const roundValuations = {
+        'Pre-Seed': 30000000,
+        'Seed':     150000000,
+        'Series A': 500000000,
+        'Series B': 2000000000,
+        'Series C': 8000000000,
+    };
+    // For the first round, use stage-based default if INR
+    let defaultPreMoney = roundValuations[defaultName] || 50000000;
+    if (rounds === 0 && state.currency === '₹') {
+        const stageDefault = getDefaultValuation(state.stage);
+        if (stageDefault) defaultPreMoney = stageDefault;
+    }
+
+    state.fundingRounds.push({
+        id: generateId(), name: defaultName,
+        raiseAmount: 0, preMoney: defaultPreMoney,
+        postMoney: defaultPreMoney, equitySold: 0
+    });
+    renderAll();
+    saveState();
+};
+
+// Global Auto-Simulate
+window.autoSimulate = () => {
+    if(state.fundingRounds.length === 0) {
+        alert("Please add at least one funding round first.");
+        return;
+    }
+    
+    if(state.fundingRounds.length > 1) {
+        if(confirm("Do you want to clear all subsequent rounds and simulate a fresh timeline starting from the FIRST round? (Click OK to simulate from Pre-Seed, Cancel to simulate from the last round)")) {
+            state.fundingRounds = [state.fundingRounds[0]];
+        }
+    }
+    
+    let targetValuation = state.exitValuation;
+    let multiplierElement = document.getElementById('simulateMultiplier');
+    let multiplier = multiplierElement ? (parseFloat(multiplierElement.value) || 10) : 10;
+    
+    while (true) {
+        let lastRound = state.fundingRounds[state.fundingRounds.length - 1];
+        let currentValuation = lastRound.postMoney;
+        let currentRaise = lastRound.raiseAmount;
+        
+        if (currentRaise === 0) {
+            alert("Please ensure the last round has a Raise Amount before simulating.");
+            break;
+        }
+        
+        if (currentValuation >= targetValuation) {
+            break;
+        }
+
+        const nextRaise = currentRaise * multiplier;
+        const nextEquitySold = 15; // Standard 15% dilution for simulated rounds
+        const nextPostMoney = nextRaise / (nextEquitySold / 100);
+        const nextPreMoney = nextPostMoney - nextRaise;
+        
+        let rounds = state.fundingRounds.length;
+        let nextName = 'Round ' + (rounds + 1);
+        const roundNames = ['Series A', 'Series B', 'Series C', 'Series D', 'Series E', 'Series F', 'IPO'];
+        if(rounds === 0) nextName = 'Pre-Seed';
+        else if(rounds === 1) nextName = 'Seed';
+        else if(rounds <= roundNames.length + 1) nextName = roundNames[rounds - 2];
+        
+        state.fundingRounds.push({
+            id: generateId(),
+            name: nextName,
+            raiseAmount: nextRaise,
+            preMoney: nextPreMoney,
+            postMoney: nextPostMoney,
+            equitySold: nextEquitySold
+        });
+        
+        // Failsafe
+        if (state.fundingRounds.length > 12) break;
+    }
+    
+    renderAll();
+    saveState();
+};
+
+// Calculate and update remaining equity dynamically
+window.updateRemainingEquity = () => {
+    const totalFoundersEquity = state.founders.reduce((sum, f) => sum + (f.ownershipPercent || 0), 0);
+    const esop = state.esopPool || 0;
+    const remaining = 100 - (totalFoundersEquity + esop);
+    
+    const badge = document.getElementById('remainingEquityBadge');
+    if (badge) {
+        badge.textContent = `${remaining.toFixed(1)}%`;
+        if (remaining < 0) {
+            badge.className = 'badge bg-danger fs-6';
+        } else if (remaining === 0) {
+            badge.className = 'badge bg-warning fs-6';
+        } else {
+            badge.className = 'badge bg-info fs-6';
+        }
+    }
 };
 
 // Stage → default pre-money valuation map (Indian rupees)
@@ -717,6 +708,8 @@ function renderFounders() {
         `;
         list.appendChild(div);
     });
+
+    window.updateRemainingEquity();
 }
 
 // Update a founder field directly from input element (no re-render of founder list)
@@ -736,6 +729,7 @@ window.updateFounderField = (inputEl) => {
     renderSummaryBar(capTableData);
     renderCapTable(capTableData);
     renderCharts(capTableData);
+    window.updateRemainingEquity();
 };
 
 window.updateFounder = (id, field, value) => {
