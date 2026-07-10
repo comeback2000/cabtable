@@ -197,8 +197,7 @@ function setupEventListeners() {
     });
 
     // Profile Management Listeners
-    document.getElementById('btnSaveProfileTop').addEventListener('click', async (e) => {
-        e.preventDefault();
+    window.forceSaveProfile = async () => {
         const cName = state.companyName;
         if (!cName) {
             alert("Please enter a Company Name before saving the profile.");
@@ -208,12 +207,13 @@ function setupEventListeners() {
         showToast("Saving profile to cloud...");
         const res = await apiCall('save_profile', { profileName: cName, data: state });
         if (res.status === 'success') {
+            alert(`SUCCESS: Profile '${cName}' saved successfully to Google Sheets!`);
             showToast(`Profile '${cName}' saved successfully!`);
             refreshProfilesList();
         } else {
-            alert("Error saving profile: " + res.message);
+            alert("ERROR saving profile: " + res.message);
         }
-    });
+    };
     
     // Change Password
     document.getElementById('btnChangePassword').addEventListener('click', async () => {
