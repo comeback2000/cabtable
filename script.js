@@ -160,31 +160,31 @@ function saveState() {
 
 // Global Save Profile Function
 window.forceSaveProfile = async () => {
-    // Read directly from the DOM input - don't trust state which may not be updated yet
     const cName = document.getElementById('companyName').value.trim();
     if (!cName) {
         alert("Please enter a Company Name first.");
         return;
     }
-    if (!adminSessionPassword) {
-        alert("You are not logged in. Please refresh the page and log in again.");
-        return;
-    }
-    
-    // Update state too
     state.companyName = cName;
-    
-    const payload = { profileName: cName, data: state };
-    
+
+    // 1. Save to localStorage immediately (always works)
+    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    localProfiles[cName] = JSON.parse(JSON.stringify(state));
+    localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
+    savedProfilesCache = localProfiles;
+
+    alert(`Profile "${cName}" saved locally! Also syncing to Google Sheets...`);
+
+    // 2. Also sync to Google Sheets in background
     try {
-        const res = await apiCall('save_profile', payload);
-        if (res.status === 'success') {
-            alert(`Profile "${cName}" saved! Click Load Profiles to see it.`);
-        } else {
-            alert("Save FAILED: " + res.message);
+        if (adminSessionPassword) {
+            const res = await apiCall('save_profile', { profileName: cName, data: state });
+            if (res.status !== 'success') {
+                console.warn('Google Sheets sync failed:', res.message);
+            }
         }
     } catch (err) {
-        alert("Network error saving profile: " + err.message);
+        console.warn('Google Sheets sync error:', err);
     }
 };
 
@@ -199,34 +199,20 @@ function showToast(message = "Data saved successfully!") {
 }
 
 // Global function to refresh profiles list
-window.refreshProfilesList = async () => {
-    const spinner = document.getElementById('profileLoadingSpinner');
+window.refreshProfilesList = () => {
     const list = document.getElementById('profileList');
-    
     if (!list) return;
-    
-    list.innerHTML = '<div class="p-4 text-center text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading from Google Sheets...</div>';
-    
-    const res = await apiCall('get_all');
-    
-    if (res.status !== 'success') {
-        list.innerHTML = `<div class="p-4 text-center text-danger small">Error loading profiles: ${res.message || 'Unknown error'}</div>`;
-        return;
-    }
-    
-    if (!res.profiles) {
-        list.innerHTML = '<div class="p-4 text-center text-danger small">Google Apps Script is running old code. Please update and redeploy it.</div>';
-        return;
-    }
-    
-    savedProfilesCache = res.profiles;
-    const names = Object.keys(savedProfilesCache);
-    
+
+    // Load from localStorage (always instant, always works)
+    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    savedProfilesCache = localProfiles;
+    const names = Object.keys(localProfiles);
+
     if (names.length === 0) {
-        list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles saved yet. Enter a Company Name and click Save.</div>';
+        list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles saved yet. Enter a Company Name above and click the green Save button.</div>';
         return;
     }
-    
+
     list.innerHTML = '';
     names.forEach(name => {
         const li = document.createElement('li');
@@ -331,15 +317,15 @@ function setupEventListeners() {
     };
     
     window.deleteProfile = async (name) => {
-        if (confirm(`Are you sure you want to permanently delete the profile '${name}'?`)) {
-            showToast("Deleting profile...");
-            const res = await apiCall('delete_profile', { profileName: name });
-            if (res.status === 'success') {
-                showToast(`Profile '${name}' deleted.`);
-                window.refreshProfilesList();
-            } else {
-                alert("Error deleting profile.");
-            }
+        if (confirm(`Delete profile "${name}"?`)) {
+            // Remove from localStorage
+            const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+            delete localProfiles[name];
+            localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
+            savedProfilesCache = localProfiles;
+            // Also delete from Google Sheets in background
+            try { if (adminSessionPassword) apiCall('delete_profile', { profileName: name }); } catch(e){}
+            window.refreshProfilesList();
         }
     };
 
