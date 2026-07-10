@@ -111,35 +111,18 @@ function parseInputToNumber(val) {
 }
 
 const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwWK1BhEZuftpXDg4cicMA5p4KcMhuhA7zDd2EbHqw4OeCVwWu6s5mlV2Fj8fKNtRlV9Q/exec";
+let adminSessionPassword = '';
+let savedProfilesCache = {};
 
 // Initialization & Data Loading
-async function init() {
-    try {
-        const response = await fetch(GOOGLE_SHEETS_URL);
-        const data = await response.json();
-        
-        if (data && data.status !== "empty" && data.status !== "error" && data.companyName) {
-            state = data;
-            if (!state.totalShares) state.totalShares = 10000000;
-        } else {
-            // Load demo data if empty
-            state = JSON.parse(JSON.stringify(demoData));
-            state.totalShares = 10000000;
-            state.esopPool = 35;
-        }
-    } catch (error) {
-        console.error("Failed to load from Google Sheets", error);
-        // Fallback to local storage if API fails
-        const savedState = localStorage.getItem('equitySimState');
-        if (savedState) {
-            state = JSON.parse(savedState);
-            if (!state.totalShares) state.totalShares = 10000000;
-        } else {
-            state = JSON.parse(JSON.stringify(demoData));
-            state.totalShares = 10000000;
-            state.esopPool = 35;
-        }
-    }
+function init() {
+    // Show login overlay by default
+    document.getElementById('loginOverlay').classList.remove('d-none');
+    
+    // Load demo data by default behind the scenes
+    state = JSON.parse(JSON.stringify(demoData));
+    state.totalShares = 10000000;
+    state.esopPool = 35;
     
     setupEventListeners();
     renderAll();
@@ -150,25 +133,188 @@ async function init() {
     updateThemeIcon(savedTheme);
 }
 
-// Debounced save to prevent hammering Google Sheets API
-let saveTimeout = null;
-function saveState() {
-    // Backup locally just in case
-    localStorage.setItem('equitySimState', JSON.stringify(state));
+// Global API Helper
+async function apiCall(action, payload = {}) {
+    payload.action = action;
+    if (action !== 'login') {
+        payload.password = adminSessionPassword;
+    }
     
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-        fetch(GOOGLE_SHEETS_URL, {
+    try {
+        const response = await fetch(GOOGLE_SHEETS_URL, {
             method: 'POST',
-            body: JSON.stringify(state)
-        }).then(() => {
-            showToast();
-        }).catch(err => console.error("Failed to save to Google Sheets", err));
-    }, 1500);
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    } catch (e) {
+        console.error("API Error", e);
+        return { status: "error", message: "Network error" };
+    }
+}
+
+// Save state locally only (re-render)
+function saveState() {
+    // Just re-render everything, we no longer auto-save to cloud
+    renderAll();
+}
+
+// Show toast message
+function showToast(message = "Data saved successfully!") {
+    const toastEl = document.getElementById('toastSuccess');
+    if(toastEl) {
+        document.getElementById('toastMessage').textContent = message;
+        const toast = new bootstrap.Toast(toastEl, { delay: 2000 });
+        toast.show();
+    }
 }
 
 // Event Listeners Setup
 function setupEventListeners() {
+    // Login System
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+        const pwd = document.getElementById('loginPassword').value;
+        const btn = document.getElementById('loginBtn');
+        const err = document.getElementById('loginError');
+        
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Authenticating...';
+        btn.disabled = true;
+        err.classList.add('d-none');
+        
+        const res = await apiCall('login', { password: pwd });
+        
+        if (res.status === 'success') {
+            adminSessionPassword = pwd;
+            document.getElementById('loginOverlay').classList.add('d-none');
+            // Auto-load profiles in background
+            refreshProfilesList();
+        } else {
+            err.textContent = "Incorrect password";
+            err.classList.remove('d-none');
+        }
+        
+        btn.innerHTML = 'Login';
+        btn.disabled = false;
+    });
+
+    // Profile Management Listeners
+    document.getElementById('menuSaveProfile').addEventListener('click', async (e) => {
+        e.preventDefault();
+        const cName = state.companyName;
+        if (!cName) {
+            alert("Please enter a Company Name before saving the profile.");
+            return;
+        }
+        
+        showToast("Saving profile to cloud...");
+        const res = await apiCall('save_profile', { profileName: cName, data: state });
+        if (res.status === 'success') {
+            showToast(`Profile '${cName}' saved successfully!`);
+            refreshProfilesList();
+        } else {
+            alert("Error saving profile: " + res.message);
+        }
+    });
+    
+    // Change Password
+    document.getElementById('btnChangePassword').addEventListener('click', async () => {
+        const oldP = document.getElementById('settingsOldPassword').value;
+        const newP = document.getElementById('settingsNewPassword').value;
+        const msg = document.getElementById('passwordChangeMsg');
+        
+        if (oldP !== adminSessionPassword) {
+            msg.className = "mt-2 small text-center text-danger";
+            msg.textContent = "Current password incorrect";
+            msg.classList.remove('d-none');
+            return;
+        }
+        if (newP.length < 4) {
+            msg.className = "mt-2 small text-center text-danger";
+            msg.textContent = "New password must be at least 4 characters";
+            msg.classList.remove('d-none');
+            return;
+        }
+        
+        const btn = document.getElementById('btnChangePassword');
+        btn.disabled = true;
+        btn.innerHTML = 'Updating...';
+        
+        const res = await apiCall('change_password', { newPassword: newP });
+        
+        if (res.status === 'success') {
+            adminSessionPassword = newP; // update local session
+            msg.className = "mt-2 small text-center text-success";
+            msg.textContent = "Password changed successfully!";
+            document.getElementById('settingsOldPassword').value = '';
+            document.getElementById('settingsNewPassword').value = '';
+        } else {
+            msg.className = "mt-2 small text-center text-danger";
+            msg.textContent = "Error: " + res.message;
+        }
+        msg.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = 'Update Password';
+    });
+    
+    // Global functions for profile modal actions
+    window.loadProfile = (name) => {
+        if (savedProfilesCache[name]) {
+            state = savedProfilesCache[name];
+            renderAll();
+            // Close modal
+            const modalEl = document.getElementById('loadProfileModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            showToast(`Loaded profile: ${name}`);
+        }
+    };
+    
+    window.deleteProfile = async (name) => {
+        if (confirm(`Are you sure you want to permanently delete the profile '${name}'?`)) {
+            showToast("Deleting profile...");
+            const res = await apiCall('delete_profile', { profileName: name });
+            if (res.status === 'success') {
+                showToast(`Profile '${name}' deleted.`);
+                refreshProfilesList();
+            } else {
+                alert("Error deleting profile.");
+            }
+        }
+    };
+    
+    async function refreshProfilesList() {
+        const spinner = document.getElementById('profileLoadingSpinner');
+        const list = document.getElementById('profileList');
+        
+        spinner.classList.remove('d-none');
+        list.innerHTML = '';
+        
+        const res = await apiCall('get_all');
+        spinner.classList.add('d-none');
+        
+        if (res.status === 'success') {
+            savedProfilesCache = res.profiles;
+            const names = Object.keys(savedProfilesCache);
+            
+            if (names.length === 0) {
+                list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles found. Save a profile first.</div>';
+                return;
+            }
+            
+            names.forEach(name => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
+                li.innerHTML = `
+                    <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-secondary"></i>${name}</div>
+                    <div>
+                        <button class="btn btn-sm btn-primary me-2" onclick="loadProfile('${name}')">Load</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+    }
+
     // Theme Toggle
     document.getElementById('themeToggle').addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-bs-theme');

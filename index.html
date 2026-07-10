@@ -15,13 +15,42 @@
 </head>
 <body>
 
+    <!-- Login Overlay -->
+    <div id="loginOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="z-index: 9999; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px);">
+        <div class="card glass-card border-0 shadow-lg" style="width: 100%; max-width: 400px;">
+            <div class="card-body p-5 text-center">
+                <h3 class="fw-bold gradient-text mb-4"><i class="fa-solid fa-chart-line me-2"></i>EquitySim</h3>
+                <p class="text-muted mb-4">Please enter the administrator password to access the cap table.</p>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-transparent border-secondary border-opacity-25"><i class="fa-solid fa-lock text-muted"></i></span>
+                    <input type="password" id="loginPassword" class="form-control" placeholder="Password" aria-label="Password">
+                </div>
+                <button id="loginBtn" class="btn btn-primary w-100 fw-bold shadow-sm">Login</button>
+                <div id="loginError" class="text-danger mt-3 small d-none"><i class="fa-solid fa-circle-exclamation me-1"></i>Incorrect password</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg glass-nav sticky-top">
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold gradient-text" href="#"><i class="fa-solid fa-chart-line me-2"></i>EquitySim</a>
-            <div class="d-flex align-items-center">
-                <button class="btn btn-outline-secondary me-3" id="resetDataBtn"><i class="fa-solid fa-rotate-right me-1"></i>Reset</button>
-                <button class="btn btn-primary shadow-sm" id="themeToggle"><i class="fa-solid fa-moon"></i></button>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Profiles Dropdown -->
+                <div class="dropdown">
+                    <button class="btn btn-outline-info dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa-solid fa-folder-open me-1"></i>Profiles
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow">
+                        <li><a class="dropdown-item" href="#" id="menuSaveProfile"><i class="fa-solid fa-floppy-disk me-2 text-primary"></i>Save Current Profile</a></li>
+                        <li><a class="dropdown-item" href="#" id="menuLoadProfile" data-bs-toggle="modal" data-bs-target="#loadProfileModal"><i class="fa-solid fa-download me-2 text-success"></i>Load / Manage Profiles</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" id="resetDataBtn"><i class="fa-solid fa-rotate-right me-2 text-warning"></i>Reset to Demo</a></li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-outline-secondary shadow-sm" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings"><i class="fa-solid fa-gear"></i></button>
+                <button class="btn btn-primary shadow-sm" id="themeToggle" title="Toggle Theme"><i class="fa-solid fa-moon"></i></button>
             </div>
         </div>
     </nav>
@@ -255,13 +284,58 @@
     </div>
 
     <!-- Export Modal (Placeholder) -->
-    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 10000">
         <div id="toastSuccess" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">
-                <div class="toast-body">
+                <div class="toast-body" id="toastMessage">
                     Data saved successfully!
                 </div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Profiles Modal -->
+    <div class="modal fade" id="loadProfileModal" tabindex="-1" aria-labelledby="loadProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-bottom border-secondary border-opacity-25">
+                    <h5 class="modal-title fw-bold" id="loadProfileModalLabel"><i class="fa-solid fa-folder-open me-2 text-primary"></i>Saved Profiles</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="profileLoadingSpinner" class="text-center p-5 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted small">Loading profiles from cloud...</p>
+                    </div>
+                    <ul class="list-group list-group-flush bg-transparent" id="profileList">
+                        <!-- Profiles injected by JS -->
+                        <div class="p-4 text-center text-muted small">No profiles found. Save a profile first.</div>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-bottom border-secondary border-opacity-25">
+                    <h5 class="modal-title fw-bold" id="settingsModalLabel"><i class="fa-solid fa-gear me-2 text-secondary"></i>Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Change Admin Password</label>
+                        <input type="password" class="form-control mb-2" id="settingsOldPassword" placeholder="Current Password">
+                        <input type="password" class="form-control mb-3" id="settingsNewPassword" placeholder="New Password">
+                        <button class="btn btn-primary w-100 btn-sm" id="btnChangePassword">Update Password</button>
+                        <div id="passwordChangeMsg" class="mt-2 small text-center d-none"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
