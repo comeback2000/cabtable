@@ -158,6 +158,30 @@ function saveState() {
     renderAll();
 }
 
+// Global Save Profile Function
+window.forceSaveProfile = async () => {
+    alert("Save button clicked! Preparing to send data to Google Sheets...");
+    
+    const cName = state.companyName;
+    if (!cName) {
+        alert("Action Cancelled: Please enter a Company Name before saving the profile.");
+        return;
+    }
+    
+    try {
+        const res = await apiCall('save_profile', { profileName: cName, data: state });
+        
+        if (res.status === 'success') {
+            alert(`SUCCESS! Your profile '${cName}' has been permanently saved to your Google Sheet!`);
+            try { refreshProfilesList(); } catch(e){}
+        } else {
+            alert("SERVER ERROR: Could not save profile. " + res.message);
+        }
+    } catch (err) {
+        alert("CRITICAL ERROR: Failed to communicate with Google Sheets. Check your internet or adblocker. " + err.message);
+    }
+};
+
 // Show toast message
 function showToast(message = "Data saved successfully!") {
     const toastEl = document.getElementById('toastSuccess');
@@ -196,25 +220,8 @@ function setupEventListeners() {
         btn.disabled = false;
     });
 
-    // Profile Management Listeners
-    window.forceSaveProfile = async () => {
-        const cName = state.companyName;
-        if (!cName) {
-            alert("Please enter a Company Name before saving the profile.");
-            return;
-        }
-        
-        showToast("Saving profile to cloud...");
-        const res = await apiCall('save_profile', { profileName: cName, data: state });
-        if (res.status === 'success') {
-            alert(`SUCCESS: Profile '${cName}' saved successfully to Google Sheets!`);
-            showToast(`Profile '${cName}' saved successfully!`);
-            refreshProfilesList();
-        } else {
-            alert("ERROR saving profile: " + res.message);
-        }
-    };
-    
+    });
+
     // Change Password
     document.getElementById('btnChangePassword').addEventListener('click', async () => {
         const oldP = document.getElementById('settingsOldPassword').value;
