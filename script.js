@@ -197,7 +197,7 @@ function setupEventListeners() {
     });
 
     // Profile Management Listeners
-    document.getElementById('menuSaveProfile').addEventListener('click', async (e) => {
+    document.getElementById('btnSaveProfileTop').addEventListener('click', async (e) => {
         e.preventDefault();
         const cName = state.companyName;
         if (!cName) {

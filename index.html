@@ -36,20 +36,13 @@
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold gradient-text" href="#"><i class="fa-solid fa-chart-line me-2"></i>EquitySim</a>
             <div class="d-flex align-items-center gap-2">
-                <!-- Profiles Dropdown -->
-                <div class="dropdown">
-                    <button class="btn btn-outline-info dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fa-solid fa-folder-open me-1"></i>Profiles
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow">
-                        <li><a class="dropdown-item" href="#" id="menuSaveProfile"><i class="fa-solid fa-floppy-disk me-2 text-primary"></i>Save Current Profile</a></li>
-                        <li><a class="dropdown-item" href="#" id="menuLoadProfile" data-bs-toggle="modal" data-bs-target="#loadProfileModal"><i class="fa-solid fa-download me-2 text-success"></i>Load / Manage Profiles</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" id="resetDataBtn"><i class="fa-solid fa-rotate-right me-2 text-warning"></i>Reset to Demo</a></li>
-                    </ul>
-                </div>
+                <!-- Dedicated Actions -->
+                <button class="btn btn-success shadow-sm fw-bold px-3" id="btnSaveProfileTop"><i class="fa-solid fa-floppy-disk me-2"></i>Save</button>
+                <button class="btn btn-outline-info shadow-sm" data-bs-toggle="modal" data-bs-target="#loadProfileModal"><i class="fa-solid fa-folder-open me-2"></i>Load Profiles</button>
+                <button class="btn btn-outline-warning shadow-sm" id="resetDataBtn" title="Reset to Demo"><i class="fa-solid fa-rotate-right"></i></button>
                 
-                <button class="btn btn-outline-secondary shadow-sm" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings"><i class="fa-solid fa-gear"></i></button>
+                <!-- Settings & Theme -->
+                <button class="btn btn-outline-secondary shadow-sm ms-2" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings"><i class="fa-solid fa-gear"></i></button>
                 <button class="btn btn-primary shadow-sm" id="themeToggle" title="Toggle Theme"><i class="fa-solid fa-moon"></i></button>
             </div>
         </div>
