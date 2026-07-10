@@ -1,0 +1,215 @@
+:root {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --secondary-color: #10b981;
+    --dark-bg: #0f172a;
+    --dark-card: rgba(30, 41, 59, 0.7);
+    --dark-border: rgba(255, 255, 255, 0.1);
+    --dark-text: #f8fafc;
+    --light-bg: #f8fafc;
+    --light-card: rgba(255, 255, 255, 0.8);
+    --light-border: rgba(0, 0, 0, 0.1);
+    --light-text: #0f172a;
+    --font-family: 'Inter', sans-serif;
+}
+
+[data-bs-theme="dark"] {
+    --bg-color: var(--dark-bg);
+    --card-bg: var(--dark-card);
+    --border-color: var(--dark-border);
+    --text-color: var(--dark-text);
+    --gradient-start: #3b82f6;
+    --gradient-end: #8b5cf6;
+    --table-hover: rgba(255,255,255,0.05);
+}
+
+[data-bs-theme="light"] {
+    --bg-color: var(--light-bg);
+    --card-bg: var(--light-card);
+    --border-color: var(--light-border);
+    --text-color: var(--light-text);
+    --gradient-start: #2563eb;
+    --gradient-end: #7c3aed;
+    --table-hover: rgba(0,0,0,0.02);
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    min-height: 100vh;
+}
+
+/* Glassmorphism Navigation */
+.glass-nav {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 1030;
+}
+
+/* Typography Gradients */
+.gradient-text {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Sticky Summary Bar */
+.sticky-summary {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 60px; /* Below navbar */
+    z-index: 1020;
+    transition: all 0.3s ease;
+}
+
+.summary-stat h4 {
+    letter-spacing: -0.5px;
+}
+
+/* Glassmorphism Cards */
+.glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-color) !important;
+    border-radius: 1rem;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* Inputs and Forms */
+.form-control, .form-select {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 0.5rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+[data-bs-theme="light"] .form-control, [data-bs-theme="light"] .form-select {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.25);
+    color: var(--text-color);
+}
+[data-bs-theme="light"] .form-control:focus, [data-bs-theme="light"] .form-select:focus {
+    background-color: #fff;
+}
+
+/* Table Styling */
+.table {
+    color: var(--text-color);
+    border-color: var(--border-color);
+    margin-bottom: 0;
+}
+.table>thead {
+    border-bottom: 2px solid var(--border-color);
+}
+.table-hover>tbody>tr:hover>* {
+    color: var(--text-color);
+    background-color: var(--table-hover);
+}
+.table>tbody>tr>td {
+    padding: 1rem 0.5rem;
+    vertical-align: middle;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+/* Gradient Background for Exit Simulator */
+.gradient-bg {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: white !important;
+    border: none !important;
+}
+
+.gradient-bg .form-label, .gradient-bg .card-title, .gradient-bg .table {
+    color: white !important;
+}
+
+.gradient-bg .form-control {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+.gradient-bg .form-control:focus {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+.gradient-bg .input-group-text {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+/* Accordion Styling */
+.accordion-item {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem !important;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+.accordion-button {
+    background-color: rgba(255,255,255,0.02);
+    color: var(--text-color);
+    font-weight: 600;
+}
+.accordion-button:not(.collapsed) {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--primary-color);
+    box-shadow: inset 0 calc(-1 * var(--bs-accordion-border-width)) 0 var(--border-color);
+}
+.accordion-button::after {
+    filter: invert(1);
+}
+[data-bs-theme="light"] .accordion-button::after {
+    filter: invert(0);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .sticky-summary {
+        top: 56px;
+    }
+    .summary-stat h4 {
+        font-size: 1.1rem;
+    }
+    .summary-stat span {
+        font-size: 0.65rem;
+    }
+}
