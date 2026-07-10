@@ -396,15 +396,32 @@ window.refreshProfilesList = () => window.showProfileSelector();
 // Load a specific profile by name
 window.loadProfile = (name) => window.openProfile(name);
 
-// Delete a profile
-window.deleteProfile = (name) => {
-    if (!confirm(`Delete profile "${name}"?`)) return;
-    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
-    delete profiles[name];
-    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
-    savedProfilesCache = profiles;
-    if (adminSessionPassword) apiCall('delete_profile', { profileName: name }).catch(()=>{});
-    window.showProfileSelector();
+// Delete a profile (awaits cloud deletion first to avoid race conditions)
+window.deleteProfile = async (name) => {
+    if (!confirm(`Are you sure you want to permanently delete profile "${name}"?`)) return;
+
+    try {
+        if (adminSessionPassword) {
+            // Await the deletion on Google Sheets
+            const res = await apiCall('delete_profile', { profileName: name });
+            if (res && res.status !== 'success') {
+                alert("Failed to delete from Cloud: " + (res.message || "Unknown error"));
+                return;
+            }
+        }
+        
+        // Successfully deleted from Sheets, now update local storage
+        const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+        delete profiles[name];
+        localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+        savedProfilesCache = profiles;
+
+        alert(`Profile "${name}" deleted successfully.`);
+        window.showProfileSelector();
+    } catch (e) {
+        alert("Failed to delete profile due to a network error.");
+        console.error(e);
+    }
 };
 
 // Event Listeners Setup
