@@ -220,8 +220,6 @@ function setupEventListeners() {
         btn.disabled = false;
     });
 
-    });
-
     // Change Password
     document.getElementById('btnChangePassword').addEventListener('click', async () => {
         const oldP = document.getElementById('settingsOldPassword').value;
