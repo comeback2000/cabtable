@@ -192,9 +192,49 @@ function showToast(message = "Data saved successfully!") {
     }
 }
 
+// Global function to refresh profiles
+window.refreshProfilesList = async () => {
+    const spinner = document.getElementById('profileLoadingSpinner');
+    const list = document.getElementById('profileList');
+    
+    if (spinner) spinner.classList.remove('d-none');
+    if (list) list.innerHTML = '';
+    
+    const res = await apiCall('get_all');
+    if (spinner) spinner.classList.add('d-none');
+    
+    if (res.status === 'success') {
+        // DETECT IF OLD APPS SCRIPT IS STILL RUNNING
+        if (res.profiles === undefined) {
+            if (list) list.innerHTML = '<div class="p-4 text-center text-danger fw-bold">ERROR: Your Google Apps Script is still running the old code! Please go back to Google Apps Script, make sure you PASTE the new code, click the SAVE icon (Ctrl+S), and THEN deploy a New Version.</div>';
+            return;
+        }
+        
+        savedProfilesCache = res.profiles;
+        const names = Object.keys(savedProfilesCache);
+        
+        if (names.length === 0) {
+            if (list) list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles found. Save a profile first.</div>';
+            return;
+        }
+        
+        names.forEach(name => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
+            li.innerHTML = `
+                <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-secondary"></i>${name}</div>
+                <div>
+                    <button class="btn btn-sm btn-primary me-2" onclick="window.loadProfile('${name}')">Load</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="window.deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+            if (list) list.appendChild(li);
+        });
+    }
+};
+
 // Event Listeners Setup
 function setupEventListeners() {
-    // Login System
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const pwd = document.getElementById('loginPassword').value;
         const btn = document.getElementById('loginBtn');
@@ -210,7 +250,7 @@ function setupEventListeners() {
             adminSessionPassword = pwd;
             document.getElementById('loginOverlay').classList.add('d-none');
             // Auto-load profiles in background
-            refreshProfilesList();
+            window.refreshProfilesList();
         } else {
             err.textContent = "Incorrect password";
             err.classList.remove('d-none');
@@ -259,7 +299,7 @@ function setupEventListeners() {
         btn.disabled = false;
         btn.innerHTML = 'Update Password';
     });
-    
+
     // Global functions for profile modal actions
     window.loadProfile = (name) => {
         if (savedProfilesCache[name]) {
@@ -279,46 +319,12 @@ function setupEventListeners() {
             const res = await apiCall('delete_profile', { profileName: name });
             if (res.status === 'success') {
                 showToast(`Profile '${name}' deleted.`);
-                refreshProfilesList();
+                window.refreshProfilesList();
             } else {
                 alert("Error deleting profile.");
             }
         }
     };
-    
-    async function refreshProfilesList() {
-        const spinner = document.getElementById('profileLoadingSpinner');
-        const list = document.getElementById('profileList');
-        
-        spinner.classList.remove('d-none');
-        list.innerHTML = '';
-        
-        const res = await apiCall('get_all');
-        spinner.classList.add('d-none');
-        
-        if (res.status === 'success') {
-            savedProfilesCache = res.profiles;
-            const names = Object.keys(savedProfilesCache);
-            
-            if (names.length === 0) {
-                list.innerHTML = '<div class="p-4 text-center text-muted small">No profiles found. Save a profile first.</div>';
-                return;
-            }
-            
-            names.forEach(name => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item bg-transparent text-light d-flex justify-content-between align-items-center py-3';
-                li.innerHTML = `
-                    <div class="fw-semibold"><i class="fa-solid fa-building me-2 text-secondary"></i>${name}</div>
-                    <div>
-                        <button class="btn btn-sm btn-primary me-2" onclick="loadProfile('${name}')">Load</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProfile('${name}')"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                `;
-                list.appendChild(li);
-            });
-        }
-    }
 
     // Theme Toggle
     document.getElementById('themeToggle').addEventListener('click', () => {
