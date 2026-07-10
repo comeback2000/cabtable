@@ -464,7 +464,24 @@ function setupEventListeners() {
         renderAll(); 
         saveState(); 
     });
-    document.getElementById('stageSelect').addEventListener('change', (e) => { state.stage = e.target.value; saveState(); });
+    document.getElementById('stageSelect').addEventListener('change', (e) => {
+        state.stage = e.target.value;
+        // Set default valuation for the selected stage
+        const defaultVal = getDefaultValuation(state.stage);
+        if (defaultVal && state.exitValuation === 10000000000) {
+            // only auto-set if user hasn't manually changed exit valuation
+        }
+        // Auto-set the first funding round pre-money if no rounds exist yet
+        if (state.fundingRounds.length === 0 && state.currency === '₹') {
+            const defaultVal = getDefaultValuation(state.stage);
+            if (defaultVal) {
+                // Store as a suggested valuation shown in summary
+                state.suggestedPreMoney = defaultVal;
+            }
+        }
+        saveState();
+        renderAll();
+    });
     
     // ESOP
     document.getElementById('esopInput').addEventListener('input', (e) => {
@@ -484,23 +501,31 @@ function setupEventListeners() {
     document.getElementById('addRoundBtn').addEventListener('click', () => {
         let defaultName = 'New Round';
         const rounds = state.fundingRounds.length;
-        if(rounds === 0) defaultName = 'Pre-Seed';
-        else if(rounds === 1) defaultName = 'Seed';
-        else if(rounds === 2) defaultName = 'Series A';
-        else if(rounds === 3) defaultName = 'Series B';
-        
-        let defaultPreMoney = 0;
-        if(rounds > 0) {
-            defaultPreMoney = state.fundingRounds[rounds - 1].postMoney;
+        if (rounds === 0) defaultName = 'Pre-Seed';
+        else if (rounds === 1) defaultName = 'Seed';
+        else if (rounds === 2) defaultName = 'Series A';
+        else if (rounds === 3) defaultName = 'Series B';
+        else if (rounds === 4) defaultName = 'Series C';
+
+        // Set a sensible default pre-money based on round name
+        const roundValuations = {
+            'Pre-Seed': 30000000,
+            'Seed':     150000000,
+            'Series A': 500000000,
+            'Series B': 2000000000,
+            'Series C': 8000000000,
+        };
+        // For the first round, use stage-based default if INR
+        let defaultPreMoney = roundValuations[defaultName] || 50000000;
+        if (rounds === 0 && state.currency === '₹') {
+            const stageDefault = getDefaultValuation(state.stage);
+            if (stageDefault) defaultPreMoney = stageDefault;
         }
-        
+
         state.fundingRounds.push({
-            id: generateId(),
-            name: defaultName,
-            raiseAmount: 0,
-            preMoney: defaultPreMoney,
-            postMoney: 0,
-            equitySold: 0
+            id: generateId(), name: defaultName,
+            raiseAmount: 0, preMoney: defaultPreMoney,
+            postMoney: defaultPreMoney, equitySold: 0
         });
         renderAll();
         saveState();
@@ -596,6 +621,37 @@ function updateThemeIcon(theme) {
 
 function updateCurrencySymbols() {
     document.querySelectorAll('.currency-symbol').forEach(el => el.textContent = state.currency);
+}
+
+// Global Add Founder (called via inline onclick)
+window.addFounder = () => {
+    state.founders.push({ id: generateId(), name: `Founder ${state.founders.length + 1}`, role: '', ownershipPercent: 0 });
+    renderAll();
+    saveState();
+};
+
+// Stage → default pre-money valuation map (Indian rupees)
+const STAGE_VALUATIONS = {
+    'Idea':       { min: 20000000,  max: 50000000,  label: '₹2–5 Cr (Est.)' },
+    'Prototype':  { min: 50000000,  max: 100000000, label: '₹5–10 Cr (Est.)' },
+    'Validation': { min: 100000000, max: 200000000, label: '₹10–20 Cr (Est.)' },
+    'Pre-Seed':   { min: 200000000, max: 500000000, label: '₹20–50 Cr (Est.)' },
+    'Seed':       { min: 500000000, max: 1500000000,label: '₹50–150 Cr (Est.)' },
+    'Series A':   { min: 1500000000,max: 5000000000,label: '₹150–500 Cr (Est.)' },
+    'Series B':   { min: 5000000000,max: 15000000000,label: '₹500Cr–1500Cr (Est.)' },
+    'Series C':   { min: 10000000000,max: 50000000000,label: '₹1000Cr+ (Est.)' },
+    'IPO':        { min: 50000000000,max: 200000000000,label: '₹5000Cr+ (Est.)' },
+};
+
+function getDefaultValuation(stage) {
+    const sv = STAGE_VALUATIONS[stage];
+    if (!sv) return null;
+    return Math.round((sv.min + sv.max) / 2);
+}
+
+function getValuationLabel(stage) {
+    const sv = STAGE_VALUATIONS[stage];
+    return sv ? sv.label : null;
 }
 
 // Global Render Function
@@ -933,15 +989,15 @@ function renderSummaryBar(data) {
     // If no funding rounds exist, show estimated benchmark based on stage
     if (state.fundingRounds.length === 0) {
         if (state.currency === '₹') {
-            if (state.stage === 'Idea') displayValuation = '₹2-5 Cr (Est.)';
-            else if (state.stage === 'Prototype') displayValuation = '₹5-10 Cr (Est.)';
-            else if (state.stage === 'Validation') displayValuation = '₹10-20 Cr (Est.)';
-            else if (state.stage === 'Revenue') displayValuation = '₹20+ Cr (Est.)';
+            const label = getValuationLabel(state.stage);
+            if (label) displayValuation = label;
         } else {
-            if (state.stage === 'Idea') displayValuation = '$250K-600K (Est.)';
-            else if (state.stage === 'Prototype') displayValuation = '$600K-1.2M (Est.)';
-            else if (state.stage === 'Validation') displayValuation = '$1.2M-2.5M (Est.)';
-            else if (state.stage === 'Revenue') displayValuation = '$2.5M+ (Est.)';
+            if (state.stage === 'Idea') displayValuation = '$250K–600K (Est.)';
+            else if (state.stage === 'Prototype') displayValuation = '$600K–1.2M (Est.)';
+            else if (state.stage === 'Validation') displayValuation = '$1.2M–2.5M (Est.)';
+            else if (state.stage === 'Pre-Seed') displayValuation = '$1M–3M (Est.)';
+            else if (state.stage === 'Seed') displayValuation = '$5M–15M (Est.)';
+            else if (state.stage === 'Series A') displayValuation = '$15M–50M (Est.)';
         }
     }
 
