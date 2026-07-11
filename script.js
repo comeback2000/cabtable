@@ -372,7 +372,7 @@ window.startNewProfile = async () => {
 // Global API Helper
 async function apiCall(action, payload = {}) {
     payload.action = action;
-    if (action !== 'login') {
+    if (action !== 'login' && action !== 'send_otp') {
         payload.password = adminSessionPassword;
     }
     
@@ -512,7 +512,7 @@ window.deleteProfile = async (name) => {
 // Event Listeners Setup
 function setupEventListeners() {
     // Step 1: Gmail Input -> Send OTP
-    document.getElementById('loginSendOtpBtn')?.addEventListener('click', () => {
+    document.getElementById('loginSendOtpBtn')?.addEventListener('click', async () => {
         const gmailInput = document.getElementById('loginGmailInput').value.trim();
         const err = document.getElementById('gmailError');
         err.classList.add('d-none');
@@ -525,11 +525,23 @@ function setupEventListeners() {
             return;
         }
 
-        userGmailID = gmailInput;
+        const btn = document.getElementById('loginSendOtpBtn');
+        const origText = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+        btn.disabled = true;
 
-        // Generate mock OTP
+        userGmailID = gmailInput;
         mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        document.getElementById('mockOtpText').textContent = mockOtpCode;
+
+        let apiSuccess = false;
+        try {
+            const res = await apiCall('send_otp', { gmail: userGmailID, otp: mockOtpCode });
+            if (res && res.status === 'success') {
+                apiSuccess = true;
+            }
+        } catch (e) {
+            console.warn("Failed to send OTP via Apps Script API", e);
+        }
 
         // Transition to step 2
         document.getElementById('loginStepGmail').classList.add('d-none');
@@ -537,8 +549,25 @@ function setupEventListeners() {
         document.getElementById('otpError').classList.add('d-none');
         document.getElementById('loginOtpInput').value = '';
         
-        // Show success alert
-        showToast("OTP sent to your Gmail ID!");
+        const mockOtpContainer = document.getElementById('mockOtpContainer');
+        if (mockOtpContainer) {
+            if (apiSuccess) {
+                // Real email was sent -> hide the on-screen code
+                mockOtpContainer.classList.add('d-none');
+                showToast("Verification code sent to your email!");
+            } else {
+                // Fallback -> show the code on screen
+                mockOtpContainer.classList.remove('d-none');
+                document.getElementById('mockOtpText').textContent = mockOtpCode;
+                // Add a small helper text to inform them
+                const infoText = mockOtpContainer.querySelector('span') || mockOtpContainer;
+                infoText.innerHTML = `Sandbox Mode: Apps Script email sending is not updated yet. Use code: <strong id="mockOtpText">${mockOtpCode}</strong>`;
+                showToast("Sandbox OTP generated!");
+            }
+        }
+
+        btn.innerHTML = origText;
+        btn.disabled = false;
     });
 
     // Step 2: Verify OTP
@@ -690,23 +719,67 @@ window.backToGmailInput = () => {
     resetLoginOverlay();
 };
 
-window.resendOtp = () => {
+window.resendOtp = async () => {
     if (!userGmailID) return;
     mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    document.getElementById('mockOtpText').textContent = mockOtpCode;
-    showToast("A new OTP has been sent!");
+
+    let apiSuccess = false;
+    try {
+        const res = await apiCall('send_otp', { gmail: userGmailID, otp: mockOtpCode });
+        if (res && res.status === 'success') {
+            apiSuccess = true;
+        }
+    } catch (e) {
+        console.warn("Failed to resend OTP via Apps Script API", e);
+    }
+
+    const mockOtpContainer = document.getElementById('mockOtpContainer');
+    if (mockOtpContainer) {
+        if (apiSuccess) {
+            mockOtpContainer.classList.add('d-none');
+            showToast("A new OTP has been sent to your email!");
+        } else {
+            mockOtpContainer.classList.remove('d-none');
+            document.getElementById('mockOtpText').textContent = mockOtpCode;
+            const infoText = mockOtpContainer.querySelector('span') || mockOtpContainer;
+            infoText.innerHTML = `Sandbox Mode: Apps Script email sending is not updated yet. Use code: <strong id="mockOtpText">${mockOtpCode}</strong>`;
+            showToast("Sandbox OTP generated!");
+        }
+    }
 };
 
-window.forgotPassword = () => {
+window.forgotPassword = async () => {
     // Forgot password is just a reset. They verify via OTP and then set a new password.
     document.getElementById('loginStepEnterPassword').classList.add('d-none');
     document.getElementById('loginStepOtp').classList.remove('d-none');
-    // Generate new OTP
+    
     mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    document.getElementById('mockOtpText').textContent = mockOtpCode;
     document.getElementById('loginOtpInput').value = '';
     document.getElementById('otpError').classList.add('d-none');
-    showToast("Verification code sent for password reset.");
+
+    let apiSuccess = false;
+    try {
+        const res = await apiCall('send_otp', { gmail: userGmailID, otp: mockOtpCode });
+        if (res && res.status === 'success') {
+            apiSuccess = true;
+        }
+    } catch (e) {
+        console.warn("Failed to send OTP for password reset", e);
+    }
+
+    const mockOtpContainer = document.getElementById('mockOtpContainer');
+    if (mockOtpContainer) {
+        if (apiSuccess) {
+            mockOtpContainer.classList.add('d-none');
+            showToast("Verification code sent to your email!");
+        } else {
+            mockOtpContainer.classList.remove('d-none');
+            document.getElementById('mockOtpText').textContent = mockOtpCode;
+            const infoText = mockOtpContainer.querySelector('span') || mockOtpContainer;
+            infoText.innerHTML = `Sandbox Mode: Apps Script email sending is not updated yet. Use code: <strong id="mockOtpText">${mockOtpCode}</strong>`;
+            showToast("Sandbox OTP generated!");
+        }
+    }
 };
 
 window.enterGuestMode = () => {
