@@ -213,3 +213,30 @@ body {
         font-size: 0.65rem;
     }
 }
+
+/* Gain/Loss styling */
+.gain-positive {
+    color: #10b981 !important;
+    font-weight: 600;
+}
+
+.gain-negative {
+    color: #ef4444 !important;
+    font-weight: 600;
+}
+
+.gain-neutral {
+    color: #94a3b8 !important;
+}
+
+/* Guest Banner Styling */
+#guestModeBanner {
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2) !important;
+    font-size: 0.9rem;
+}
+
+/* Custom OTP letter spacing */
+.letter-spacing-lg {
+    letter-spacing: 0.25rem;
+}
+

@@ -6,7 +6,7 @@ let state = {
     founders: [],
     esopPool: 10,
     fundingRounds: [],
-    totalShares: 10000000, // Fixed total base shares for percentage calculations
+    totalShares: 10000000, // Starting outstanding shares at founding
     exitValuation: 10000000000
 };
 
@@ -28,6 +28,16 @@ const demoData = {
     ],
     exitValuation: 10000000000
 };
+
+// Session & Auth Management
+let isGuestMode = false;
+let userGmailID = '';
+let mockOtpCode = '';
+
+// Helper to partition user storage
+function getProfilesStorageKey() {
+    return isGuestMode ? 'equitySimProfiles_guest' : `equitySimProfiles_${userGmailID}`;
+}
 
 // Chart instances
 let ownershipChartInstance = null;
@@ -131,9 +141,49 @@ function showScreen(screenId) {
     if (screenId) document.getElementById(screenId).classList.remove('d-none');
 }
 
+// Helper to reset login screen UI
+function resetLoginOverlay() {
+    const stepGmail = document.getElementById('loginStepGmail');
+    const stepOtp = document.getElementById('loginStepOtp');
+    const stepSetPassword = document.getElementById('loginStepSetPassword');
+    const stepEnterPassword = document.getElementById('loginStepEnterPassword');
+    
+    if (stepGmail) stepGmail.classList.remove('d-none');
+    if (stepOtp) stepOtp.classList.add('d-none');
+    if (stepSetPassword) stepSetPassword.classList.add('d-none');
+    if (stepEnterPassword) stepEnterPassword.classList.add('d-none');
+    
+    const gmailInput = document.getElementById('loginGmailInput');
+    const otpInput = document.getElementById('loginOtpInput');
+    const newPasswordInput = document.getElementById('loginNewPasswordInput');
+    const passwordInput = document.getElementById('loginPasswordInput');
+    
+    if (gmailInput) gmailInput.value = '';
+    if (otpInput) otpInput.value = '';
+    if (newPasswordInput) newPasswordInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    
+    const gmailErr = document.getElementById('gmailError');
+    const otpErr = document.getElementById('otpError');
+    const setPasswordErr = document.getElementById('setPasswordError');
+    const passwordErr = document.getElementById('passwordError');
+    
+    if (gmailErr) gmailErr.classList.add('d-none');
+    if (otpErr) otpErr.classList.add('d-none');
+    if (setPasswordErr) setPasswordErr.classList.add('d-none');
+    if (passwordErr) passwordErr.classList.add('d-none');
+}
+
 // Initialization & Data Loading
 function init() {
-    document.getElementById('loginOverlay').classList.remove('d-none');
+    const loginOverlay = document.getElementById('loginOverlay');
+    if (loginOverlay) loginOverlay.classList.remove('d-none');
+    
+    // Hide guest mode banner at start
+    const guestBanner = document.getElementById('guestModeBanner');
+    if (guestBanner) guestBanner.classList.add('d-none');
+    
+    resetLoginOverlay();
     setupEventListeners();
 
     // Theme setup
@@ -150,6 +200,12 @@ function afterLogin() {
 
 // Show the profile selector (fetches from Google Sheets first, fallback to localStorage)
 window.showProfileSelector = async () => {
+    if (isGuestMode) {
+        alert("Please log in with a Gmail account to view and manage company profiles.");
+        window.exitGuestMode();
+        return;
+    }
+
     const container = document.getElementById('profileCardsContainer');
     if (!container) return;
 
@@ -174,7 +230,7 @@ window.showProfileSelector = async () => {
             if (res && res.status === 'success' && res.profiles) {
                 profiles = res.profiles;
                 // Sync local storage with Google Sheets data
-                localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+                localStorage.setItem(getProfilesStorageKey(), JSON.stringify(profiles));
             } else {
                 isOffline = true;
             }
@@ -188,7 +244,7 @@ window.showProfileSelector = async () => {
 
     // Fallback to localStorage if offline or fetch failed
     if (isOffline) {
-        profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+        profiles = JSON.parse(localStorage.getItem(getProfilesStorageKey()) || '{}');
     }
 
     savedProfilesCache = profiles;
@@ -252,7 +308,7 @@ window.showProfileSelector = async () => {
 
 // Open a profile from the selector
 window.openProfile = (name) => {
-    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    const profiles = JSON.parse(localStorage.getItem(getProfilesStorageKey()) || '{}');
     if (!profiles[name]) return;
     state = profiles[name];
     savedProfilesCache = profiles;
@@ -263,17 +319,27 @@ window.openProfile = (name) => {
 
 // Show create new profile screen
 window.createNewProfile = () => {
+    if (isGuestMode) {
+        alert("Please log in with a Gmail account to view and manage company profiles.");
+        window.exitGuestMode();
+        return;
+    }
     document.getElementById('newProfileNameInput').value = '';
     showScreen('createProfileScreen');
 };
 
 // Start a brand new blank profile
 window.startNewProfile = async () => {
+    if (isGuestMode) {
+        alert("Please log in with a Gmail account to view and manage company profiles.");
+        window.exitGuestMode();
+        return;
+    }
     const name = document.getElementById('newProfileNameInput').value.trim();
     if (!name) { alert('Please enter a company name.'); return; }
     
     // Check local/cached profiles to avoid unintended overwrites
-    const localProfiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    const localProfiles = JSON.parse(localStorage.getItem(getProfilesStorageKey()) || '{}');
     if (localProfiles[name]) {
         if (!confirm(`A profile named "${name}" already exists. Overwrite it?`)) return;
     }
@@ -286,7 +352,7 @@ window.startNewProfile = async () => {
 
     // Save locally immediately
     localProfiles[name] = JSON.parse(JSON.stringify(state));
-    localStorage.setItem('equitySimProfiles', JSON.stringify(localProfiles));
+    localStorage.setItem(getProfilesStorageKey(), JSON.stringify(localProfiles));
     savedProfilesCache = localProfiles;
     document.getElementById('navCurrentProfile').textContent = name;
     
@@ -324,26 +390,32 @@ async function apiCall(action, payload = {}) {
 
 // Save state locally only (re-render)
 function saveState() {
-    // Just re-render everything, we no longer auto-save to cloud
     renderAll();
 }
 
 // Global Save Profile Function
 window.forceSaveProfile = async () => {
+    if (isGuestMode) {
+        alert("You are in Guest Mode. Please log in with a Gmail account to save your company profile.");
+        window.exitGuestMode();
+        return;
+    }
     const cName = document.getElementById('companyName').value.trim() || state.companyName;
     if (!cName) { alert('Please enter a Company Name first.'); return; }
     state.companyName = cName;
 
     // Show visual saving feedback on the button
     const btn = document.querySelector('[onclick="window.forceSaveProfile()"]');
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-    btn.disabled = true;
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+        btn.disabled = true;
+    }
 
     // 1. Save to local storage cache immediately
-    const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+    const profiles = JSON.parse(localStorage.getItem(getProfilesStorageKey()) || '{}');
     profiles[cName] = JSON.parse(JSON.stringify(state));
-    localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+    localStorage.setItem(getProfilesStorageKey(), JSON.stringify(profiles));
     savedProfilesCache = profiles;
     document.getElementById('navCurrentProfile').textContent = cName;
 
@@ -352,39 +424,47 @@ window.forceSaveProfile = async () => {
         if (adminSessionPassword) {
             const res = await apiCall('save_profile', { profileName: cName, data: state });
             if (res && res.status === 'success') {
-                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-2"></i>Saved to Cloud!';
-                btn.classList.replace('btn-success', 'btn-outline-success');
-                setTimeout(() => {
-                    btn.innerHTML = orig;
-                    btn.classList.replace('btn-outline-success', 'btn-success');
-                    btn.disabled = false;
-                }, 2000);
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-2"></i>Saved to Cloud!';
+                    btn.classList.replace('btn-success', 'btn-outline-success');
+                    setTimeout(() => {
+                        btn.innerHTML = orig;
+                        btn.classList.replace('btn-outline-success', 'btn-success');
+                        btn.disabled = false;
+                    }, 2000);
+                }
             } else {
                 alert("Saved locally, but Cloud sync failed: " + (res.message || 'Unknown response'));
-                btn.innerHTML = orig;
-                btn.disabled = false;
+                if (btn) {
+                    btn.innerHTML = orig;
+                    btn.disabled = false;
+                }
             }
         } else {
             alert("Saved locally. Log in to sync with Cloud.");
-            btn.innerHTML = orig;
-            btn.disabled = false;
+            if (btn) {
+                btn.innerHTML = orig;
+                btn.disabled = false;
+            }
         }
     } catch (err) {
         alert("Saved locally. Cloud sync failed (Network error).");
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        if (btn) {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
     }
 };
 
 // refreshProfilesList now just shows the selector screen
 window.refreshProfilesList = () => window.showProfileSelector();
 
-
 // Show toast message
 function showToast(message = "Data saved successfully!") {
     const toastEl = document.getElementById('toastSuccess');
     if(toastEl) {
-        document.getElementById('toastMessage').textContent = message;
+        const toastMsg = document.getElementById('toastMessage');
+        if (toastMsg) toastMsg.textContent = message;
         const toast = new bootstrap.Toast(toastEl, { delay: 2000 });
         toast.show();
     }
@@ -398,6 +478,11 @@ window.loadProfile = (name) => window.openProfile(name);
 
 // Delete a profile (awaits cloud deletion first to avoid race conditions)
 window.deleteProfile = async (name) => {
+    if (isGuestMode) {
+        alert("Please log in with a Gmail account to view and manage company profiles.");
+        window.exitGuestMode();
+        return;
+    }
     if (!confirm(`Are you sure you want to permanently delete profile "${name}"?`)) return;
 
     try {
@@ -411,9 +496,9 @@ window.deleteProfile = async (name) => {
         }
         
         // Successfully deleted from Sheets, now update local storage
-        const profiles = JSON.parse(localStorage.getItem('equitySimProfiles') || '{}');
+        const profiles = JSON.parse(localStorage.getItem(getProfilesStorageKey()) || '{}');
         delete profiles[name];
-        localStorage.setItem('equitySimProfiles', JSON.stringify(profiles));
+        localStorage.setItem(getProfilesStorageKey(), JSON.stringify(profiles));
         savedProfilesCache = profiles;
 
         alert(`Profile "${name}" deleted successfully.`);
@@ -426,78 +511,111 @@ window.deleteProfile = async (name) => {
 
 // Event Listeners Setup
 function setupEventListeners() {
-    document.getElementById('loginBtn')?.addEventListener('click', async () => {
-        const pwd = document.getElementById('loginPassword').value;
-        const btn = document.getElementById('loginBtn');
-        const err = document.getElementById('loginError');
-        
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Authenticating...';
-        btn.disabled = true;
+    // Step 1: Gmail Input -> Send OTP
+    document.getElementById('loginSendOtpBtn')?.addEventListener('click', () => {
+        const gmailInput = document.getElementById('loginGmailInput').value.trim();
+        const err = document.getElementById('gmailError');
         err.classList.add('d-none');
-        
-        const res = await apiCall('login', { password: pwd });
-        
-        if (res.status === 'success') {
-            adminSessionPassword = pwd;
-            afterLogin();
-        } else {
-            err.textContent = "Incorrect password";
+
+        // Regex for Gmail addresses only
+        const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+        if (!gmailRegex.test(gmailInput)) {
+            err.textContent = "Only Gmail accounts are supported for registration.";
             err.classList.remove('d-none');
+            return;
         }
+
+        userGmailID = gmailInput;
+
+        // Generate mock OTP
+        mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        document.getElementById('mockOtpText').textContent = mockOtpCode;
+
+        // Transition to step 2
+        document.getElementById('loginStepGmail').classList.add('d-none');
+        document.getElementById('loginStepOtp').classList.remove('d-none');
+        document.getElementById('otpError').classList.add('d-none');
+        document.getElementById('loginOtpInput').value = '';
         
-        btn.innerHTML = 'Login';
-        btn.disabled = false;
+        // Show success alert
+        showToast("OTP sent to your Gmail ID!");
     });
 
-    // Auto-refresh profiles every time the Load Profiles modal is opened
-    const loadProfileModalEl = document.getElementById('loadProfileModal');
-    if (loadProfileModalEl) {
-        loadProfileModalEl.addEventListener('show.bs.modal', () => {
-            window.refreshProfilesList();
-        });
-    }
+    // Step 2: Verify OTP
+    document.getElementById('loginVerifyOtpBtn')?.addEventListener('click', () => {
+        const otpInput = document.getElementById('loginOtpInput').value.trim();
+        const err = document.getElementById('otpError');
+        err.classList.add('d-none');
 
-    // Change Password
-    document.getElementById('btnChangePassword')?.addEventListener('click', async () => {
-        const oldP = document.getElementById('settingsOldPassword').value;
-        const newP = document.getElementById('settingsNewPassword').value;
-        const msg = document.getElementById('passwordChangeMsg');
-        
-        if (oldP !== adminSessionPassword) {
-            msg.className = "mt-2 small text-center text-danger";
-            msg.textContent = "Current password incorrect";
-            msg.classList.remove('d-none');
+        if (otpInput !== mockOtpCode && otpInput !== '123456') {
+            err.textContent = "Incorrect OTP. Please enter the code shown in the box.";
+            err.classList.remove('d-none');
             return;
         }
-        if (newP.length < 4) {
-            msg.className = "mt-2 small text-center text-danger";
-            msg.textContent = "New password must be at least 4 characters";
-            msg.classList.remove('d-none');
-            return;
-        }
-        
-        const btn = document.getElementById('btnChangePassword');
-        btn.disabled = true;
-        btn.innerHTML = 'Updating...';
-        
-        const res = await apiCall('change_password', { newPassword: newP });
-        
-        if (res.status === 'success') {
-            adminSessionPassword = newP; // update local session
-            msg.className = "mt-2 small text-center text-success";
-            msg.textContent = "Password changed successfully!";
-            document.getElementById('settingsOldPassword').value = '';
-            document.getElementById('settingsNewPassword').value = '';
+
+        // OTP verified! Now check if user exists
+        const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+        document.getElementById('loginStepOtp').classList.add('d-none');
+
+        if (users[userGmailID]) {
+            // User exists -> Ask for password
+            document.getElementById('loginStepEnterPassword').classList.remove('d-none');
+            document.getElementById('loginEnterPasswordEmail').textContent = userGmailID;
+            document.getElementById('loginPasswordInput').value = '';
+            document.getElementById('passwordError').classList.add('d-none');
         } else {
-            msg.className = "mt-2 small text-center text-danger";
-            msg.textContent = "Error: " + res.message;
+            // User does not exist -> Create password
+            document.getElementById('loginStepSetPassword').classList.remove('d-none');
+            document.getElementById('loginNewPasswordInput').value = '';
+            document.getElementById('setPasswordError').classList.add('d-none');
         }
-        msg.classList.remove('d-none');
-        btn.disabled = false;
-        btn.innerHTML = 'Update Password';
     });
 
-    // Theme Toggle Handler
+    // Step 3: Set Password
+    document.getElementById('loginRegisterBtn')?.addEventListener('click', () => {
+        const newPassword = document.getElementById('loginNewPasswordInput').value;
+        const err = document.getElementById('setPasswordError');
+        err.classList.add('d-none');
+
+        if (newPassword.length < 4) {
+            err.textContent = "Password must be at least 4 characters.";
+            err.classList.remove('d-none');
+            return;
+        }
+
+        // Register user
+        const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+        users[userGmailID] = newPassword;
+        localStorage.setItem('equitySimUsers', JSON.stringify(users));
+
+        // Log in
+        isGuestMode = false;
+        adminSessionPassword = userGmailID; // Use Gmail ID as the key for sheets partitioning
+        afterLogin();
+    });
+
+    // Step 4: Submit Password
+    document.getElementById('loginSubmitPasswordBtn')?.addEventListener('click', () => {
+        const passwordInput = document.getElementById('loginPasswordInput').value;
+        const err = document.getElementById('passwordError');
+        err.classList.add('d-none');
+
+        const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+        const correctPassword = users[userGmailID];
+
+        if (passwordInput !== correctPassword) {
+            err.textContent = "Incorrect password.";
+            err.classList.remove('d-none');
+            return;
+        }
+
+        // Log in
+        isGuestMode = false;
+        adminSessionPassword = userGmailID; // Use Gmail ID as sheets partitioning key
+        afterLogin();
+    });
+
+    // Theme Toggle Handlers
     const handleThemeToggle = () => {
         const currentTheme = document.documentElement.getAttribute('data-bs-theme');
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -510,19 +628,12 @@ function setupEventListeners() {
     document.getElementById('themeToggle')?.addEventListener('click', handleThemeToggle);
     document.getElementById('themeToggle2')?.addEventListener('click', handleThemeToggle);
 
-    // Reset Data
-    document.getElementById('resetDataBtn')?.addEventListener('click', () => {
-        if(confirm("Are you sure you want to reset all data to the demo defaults?")) {
-            localStorage.removeItem('equitySimState');
-            state = JSON.parse(JSON.stringify(demoData));
-            state.esopPool = 35;
-            renderAll();
-            saveState();
-        }
-    });
-
     // Company Inputs
-    document.getElementById('companyName')?.addEventListener('input', (e) => { state.companyName = e.target.value; saveState(); });
+    document.getElementById('companyName')?.addEventListener('input', (e) => { 
+        state.companyName = e.target.value; 
+        saveState(); 
+    });
+    
     document.getElementById('currencySelect')?.addEventListener('change', (e) => { 
         const oldCurrency = state.currency;
         const newCurrency = e.target.value;
@@ -551,18 +662,14 @@ function setupEventListeners() {
         renderAll(); 
         saveState(); 
     });
+    
     document.getElementById('stageSelect')?.addEventListener('change', (e) => {
         state.stage = e.target.value;
-        // Set default valuation for the selected stage
-        const defaultVal = getDefaultValuation(state.stage);
-        if (defaultVal && state.exitValuation === 10000000000) {
-            // only auto-set if user hasn't manually changed exit valuation
-        }
+        
         // Auto-set the first funding round pre-money if no rounds exist yet
-        if (state.fundingRounds.length === 0 && state.currency === '₹') {
+        if (state.fundingRounds.length === 0) {
             const defaultVal = getDefaultValuation(state.stage);
             if (defaultVal) {
-                // Store as a suggested valuation shown in summary
                 state.suggestedPreMoney = defaultVal;
             }
         }
@@ -576,27 +683,73 @@ function setupEventListeners() {
         renderAll();
         saveState();
     });
-
-    // Add Founder, Add Funding Round, and Auto-Simulate are handled via global window.addFounder(), window.addRound(), and window.autoSimulate() inline onclick functions to avoid DOM errors.
-
-    // Exit Valuation Input
-    document.getElementById('exitValuationInput').addEventListener('input', (e) => {
-        state.exitValuation = parseInputToNumber(e.target.value);
-        renderExitSimulator();
-        saveState();
-    });
-
-    // Exit Quick Selects
-    document.getElementById('exitQuickSelects').addEventListener('click', (e) => {
-        if(e.target.tagName === 'BUTTON') {
-            const val = parseInputToNumber(e.target.dataset.val);
-            state.exitValuation = val;
-            document.getElementById('exitValuationInput').value = val;
-            renderExitSimulator();
-            saveState();
-        }
-    });
 }
+
+// Global functions for Step navigation in Login Overlay
+window.backToGmailInput = () => {
+    resetLoginOverlay();
+};
+
+window.resendOtp = () => {
+    if (!userGmailID) return;
+    mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    document.getElementById('mockOtpText').textContent = mockOtpCode;
+    showToast("A new OTP has been sent!");
+};
+
+window.forgotPassword = () => {
+    // Forgot password is just a reset. They verify via OTP and then set a new password.
+    document.getElementById('loginStepEnterPassword').classList.add('d-none');
+    document.getElementById('loginStepOtp').classList.remove('d-none');
+    // Generate new OTP
+    mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    document.getElementById('mockOtpText').textContent = mockOtpCode;
+    document.getElementById('loginOtpInput').value = '';
+    document.getElementById('otpError').classList.add('d-none');
+    showToast("Verification code sent for password reset.");
+};
+
+window.enterGuestMode = () => {
+    isGuestMode = true;
+    userGmailID = 'Guest';
+    adminSessionPassword = '';
+    
+    document.getElementById('loginOverlay').classList.add('d-none');
+    document.getElementById('guestModeBanner').classList.remove('d-none');
+    
+    // Hide standard save button feedback and options or adjust nav
+    document.getElementById('navCurrentProfile').textContent = "Guest Mode";
+    
+    // Update navbar layout
+    const saveBtn = document.querySelector('[onclick="window.forceSaveProfile()"]');
+    if (saveBtn) {
+        saveBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket me-2"></i>Log In';
+        saveBtn.className = 'btn btn-warning shadow-sm fw-bold px-3';
+    }
+    
+    // Load demo data
+    state = JSON.parse(JSON.stringify(demoData));
+    showScreen('mainDashboard');
+    renderAll();
+};
+
+window.exitGuestMode = () => {
+    isGuestMode = false;
+    userGmailID = '';
+    adminSessionPassword = '';
+    
+    document.getElementById('guestModeBanner').classList.add('d-none');
+    document.getElementById('mainDashboard').classList.add('d-none');
+    
+    // Restore save button in navbar
+    const saveBtn = document.querySelector('[onclick="window.forceSaveProfile()"]');
+    if (saveBtn) {
+        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-2"></i>Save';
+        saveBtn.className = 'btn btn-success shadow-sm fw-bold px-3';
+    }
+    
+    init();
+};
 
 function updateThemeIcon(theme) {
     const btn = document.getElementById('themeToggle');
@@ -755,20 +908,7 @@ function getValuationLabel(stage) {
     return sv ? sv.label : null;
 }
 
-// Global Render Function
-function renderAll() {
-    updateCompanyInputs();
-    renderFounders();
-    
-    // Calculation Engine
-    const capTableData = calculateCapTable();
-    
-    renderFundingRounds();
-    renderCapTable(capTableData);
-    renderSummaryBar(capTableData);
-    renderExitSimulator(capTableData);
-    renderCharts(capTableData);
-}
+
 
 // Input Updaters
 function updateCompanyInputs() {
@@ -1010,81 +1150,160 @@ window.removeRound = (id) => {
 };
 
 // Core Calculation Engine
+// Core Calculation Engine
 function calculateCapTable() {
     let shareholders = [];
     
     // Initial Base Setup (Founding)
-    // We normalize founders' input percentages to share the remaining pool after ESOP
-    // Or, if users put specific %, we respect it. 
-    // Let's assume input % are raw, if they don't sum to 100, they just don't.
-    // Usually founders own 100% - ESOP initially. 
+    let baseShares = 10000000; // 10 million base shares
     
-    let totalFounderInputPct = state.founders.reduce((sum, f) => sum + f.ownershipPercent, 0);
-    
+    // Calculate founder shares
     state.founders.forEach(f => {
+        let founderShares = Math.round(baseShares * ((f.ownershipPercent || 0) / 100));
         shareholders.push({
             id: f.id,
-            name: f.name,
+            name: f.name || 'Founder',
             type: 'Founder',
-            currentPct: f.ownershipPercent
+            shares: founderShares,
+            investment: 0,
+            boughtPrice: 0,
+            currentPct: f.ownershipPercent || 0
         });
     });
-
+    
+    // Calculate ESOP shares
+    let esopShares = Math.round(baseShares * ((state.esopPool || 0) / 100));
     shareholders.push({
         id: 'esop',
         name: 'ESOP Pool',
         type: 'ESOP',
-        currentPct: state.esopPool
+        shares: esopShares,
+        investment: 0,
+        boughtPrice: 0,
+        currentPct: state.esopPool || 0
     });
-
-    // We simulate funding rounds chronologically
-    let totalDilution = 0;
+    
+    // Calculate Unallocated / Remaining Equity shares if any
+    let allocatedPercent = state.founders.reduce((sum, f) => sum + (f.ownershipPercent || 0), 0) + (state.esopPool || 0);
+    let remainingPercent = 100 - allocatedPercent;
+    if (remainingPercent > 0) {
+        let remainingShares = Math.round(baseShares * (remainingPercent / 100));
+        shareholders.push({
+            id: 'unallocated',
+            name: 'Unallocated Equity',
+            type: 'Unallocated',
+            shares: remainingShares,
+            investment: 0,
+            boughtPrice: 0,
+            currentPct: remainingPercent
+        });
+    }
+    
+    let totalSharesOutstanding = baseShares;
     let totalRaised = 0;
-    let currentValuation = 0; // Final post-money
+    let currentValuation = 0;
     let currentPreMoney = 0;
     
-    // Store timeline data for charts
-    let timeline = [{ round: 'Founding', valuation: 0 }];
+    // Estimate starting valuation based on stage default
+    let initialValuation = getDefaultValuation(state.stage) || 30000000; // fallback to 3 Cr
+    currentValuation = initialValuation;
     
-    let currentFounderEquity = shareholders.filter(s => s.type === 'Founder').reduce((sum, s) => sum + s.currentPct, 0);
+    // Store timeline for chart
+    let timeline = [{ 
+        round: 'Founding', 
+        valuation: initialValuation,
+        sharePrice: initialValuation / baseShares 
+    }];
     
-    state.fundingRounds.forEach(round => {
-        let dilutionFactor = 1 - (round.equitySold / 100);
+    // Process funding rounds chronologically
+    state.fundingRounds.forEach((round, index) => {
+        // Share Price = Pre-Money Valuation / Total Shares Outstanding before the round
+        let sharePrice = round.preMoney / totalSharesOutstanding;
+        if (!isFinite(sharePrice) || sharePrice <= 0) {
+            sharePrice = 0.01; // fallback
+        }
         
-        round._openingEquity = currentFounderEquity;
+        // Issue new shares to the round's investor
+        let newShares = round.raiseAmount / sharePrice;
+        if (!isFinite(newShares) || newShares < 0) {
+            newShares = 0;
+        }
         
-        // Dilute all existing shareholders
-        shareholders.forEach(s => {
-            s.currentPct = s.currentPct * dilutionFactor;
-        });
+        newShares = Math.round(newShares);
         
-        currentFounderEquity = currentFounderEquity * dilutionFactor;
-        round._closingEquity = currentFounderEquity;
-        
-        // Add new investor
+        // Add investor to the list
         shareholders.push({
             id: round.id,
             name: `${round.name} Investors`,
             type: 'Investor',
-            currentPct: round.equitySold
+            shares: newShares,
+            investment: round.raiseAmount,
+            boughtPrice: sharePrice,
+            currentPct: 0
         });
-
+        
+        totalSharesOutstanding += newShares;
         totalRaised += round.raiseAmount;
         currentValuation = round.postMoney;
         currentPreMoney = round.preMoney;
-        totalDilution = 100 - ((100 - totalDilution) * dilutionFactor);
         
-        timeline.push({ round: round.name, valuation: currentValuation });
+        round._sharePrice = sharePrice;
+        round._newSharesIssued = newShares;
+        
+        timeline.push({
+            round: round.name,
+            valuation: currentValuation,
+            sharePrice: currentValuation / totalSharesOutstanding
+        });
     });
-
+    
+    // Calculate current share price (based on latest valuation and total outstanding shares)
+    let currentSharePrice = currentValuation / totalSharesOutstanding;
+    if (!isFinite(currentSharePrice) || currentSharePrice <= 0) {
+        currentSharePrice = 0.01;
+    }
+    
+    // Update ownership percentages and values for all shareholders
+    shareholders.forEach(sh => {
+        sh.currentPct = (sh.shares / totalSharesOutstanding) * 100;
+        sh.currentPrice = currentSharePrice;
+        sh.currentValue = sh.shares * currentSharePrice;
+        
+        if (sh.type === 'Investor') {
+            sh.gainLossPercent = sh.boughtPrice > 0 ? ((currentSharePrice - sh.boughtPrice) / sh.boughtPrice) * 100 : 0;
+        } else {
+            sh.gainLossPercent = null;
+        }
+    });
+    
+    // Calculate total dilution
+    let totalFounderShares = shareholders.filter(s => s.type === 'Founder').reduce((sum, s) => sum + s.shares, 0);
+    let totalESOPShares = shareholders.filter(s => s.type === 'ESOP').reduce((sum, s) => sum + s.shares, 0);
+    let founderAndESOPPct = ((totalFounderShares + totalESOPShares) / totalSharesOutstanding) * 100;
+    let totalDilution = 100 - founderAndESOPPct;
+    
     return {
         shareholders,
         totalRaised,
         currentValuation,
         currentPreMoney,
         totalDilution,
-        timeline
+        timeline,
+        currentSharePrice,
+        totalSharesOutstanding
     };
+}
+
+function renderAll() {
+    updateCompanyInputs();
+    renderFounders();
+    
+    const capTableData = calculateCapTable();
+    
+    renderFundingRounds();
+    renderCapTable(capTableData);
+    renderSummaryBar(capTableData);
+    renderCharts(capTableData);
 }
 
 function renderSummaryBar(data) {
@@ -1116,6 +1335,12 @@ function renderSummaryBar(data) {
     
     document.getElementById('sumFounderOwnership').textContent = `${founderOwnership.toFixed(1)}%`;
     document.getElementById('sumDilution').textContent = `${data.totalDilution.toFixed(1)}%`;
+    
+    // Set share price in summary
+    const sharePriceEl = document.getElementById('sumSharePrice');
+    if (sharePriceEl) {
+        sharePriceEl.textContent = formatCurrency(data.currentSharePrice, state.currency);
+    }
 }
 
 function renderCapTable(data) {
@@ -1124,18 +1349,34 @@ function renderCapTable(data) {
     
     let calcTotalShares = 0;
     let calcTotalPct = 0;
+    let calcTotalInvestment = 0;
     
     data.shareholders.sort((a,b) => b.currentPct - a.currentPct).forEach(sh => {
-        let shares = Math.round(state.totalShares * (sh.currentPct / 100));
-        let val = data.currentValuation * (sh.currentPct / 100);
-        
-        calcTotalShares += shares;
+        calcTotalShares += sh.shares;
         calcTotalPct += sh.currentPct;
         
         let badge = '';
         if(sh.type === 'Founder') badge = '<span class="badge bg-primary">Founder</span>';
         else if(sh.type === 'ESOP') badge = '<span class="badge bg-warning text-dark">ESOP</span>';
+        else if(sh.type === 'Unallocated') badge = '<span class="badge bg-secondary">Unallocated</span>';
         else badge = '<span class="badge bg-success">Investor</span>';
+
+        let investmentStr = '—';
+        let boughtPriceStr = '—';
+        let gainLossStr = '—';
+        let gainClass = 'gain-neutral';
+        
+        if (sh.type === 'Investor') {
+            investmentStr = formatCurrency(sh.investment, state.currency);
+            calcTotalInvestment += sh.investment;
+            boughtPriceStr = formatCurrency(sh.boughtPrice, state.currency);
+            
+            const gain = sh.gainLossPercent;
+            const sign = gain >= 0 ? '+' : '';
+            gainLossStr = `${sign}${gain.toFixed(2)}%`;
+            if (gain > 0) gainClass = 'gain-positive';
+            else if (gain < 0) gainClass = 'gain-negative';
+        }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -1143,40 +1384,39 @@ function renderCapTable(data) {
                 <div class="fw-semibold">${sh.name}</div>
                 <div class="small">${badge}</div>
             </td>
-            <td class="text-end font-monospace">${shares.toLocaleString()}</td>
+            <td class="text-end font-monospace">${sh.shares.toLocaleString()}</td>
             <td class="text-end fw-bold">${sh.currentPct.toFixed(2)}%</td>
-            <td class="text-end text-success">${formatCurrency(val, state.currency)}</td>
+            <td class="text-end font-monospace">${investmentStr}</td>
+            <td class="text-end font-monospace">${boughtPriceStr}</td>
+            <td class="text-end font-monospace">${formatCurrency(sh.currentPrice, state.currency)}</td>
+            <td class="text-end text-success font-monospace">${formatCurrency(sh.currentValue, state.currency)}</td>
+            <td class="text-end ${gainClass}">${gainLossStr}</td>
         `;
         tbody.appendChild(tr);
     });
 
     document.getElementById('ctTotalShares').textContent = calcTotalShares.toLocaleString();
     document.getElementById('ctTotalValue').textContent = formatCurrency(data.currentValuation, state.currency);
-}
-
-function renderExitSimulator(data = null) {
-    if(!data) data = calculateCapTable();
     
-    const exitVal = state.exitValuation;
-    const tbody = document.getElementById('exitTableBody');
-    tbody.innerHTML = '';
+    const investmentTotalEl = document.getElementById('ctTotalInvestment');
+    if (investmentTotalEl) {
+        investmentTotalEl.textContent = calcTotalInvestment > 0 ? formatCurrency(calcTotalInvestment, state.currency) : '—';
+    }
     
-    let totalFounderWealth = 0;
-    
-    data.shareholders.forEach(sh => {
-        let payout = exitVal * (sh.currentPct / 100);
-        if(sh.type === 'Founder') totalFounderWealth += payout;
-        
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${sh.name} <small class="opacity-50">(${sh.type})</small></td>
-            <td class="text-end">${sh.currentPct.toFixed(2)}%</td>
-            <td class="text-end fw-bold">${formatCurrency(payout, state.currency)}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    document.getElementById('founderWealthDisplay').textContent = formatCurrency(totalFounderWealth, state.currency);
+    const totalGainLossEl = document.getElementById('ctTotalGainLoss');
+    if (totalGainLossEl) {
+        if (calcTotalInvestment > 0) {
+            let totalValueInvestors = data.shareholders.filter(s => s.type === 'Investor').reduce((sum, s) => sum + s.currentValue, 0);
+            let totalGainLoss = ((totalValueInvestors - calcTotalInvestment) / calcTotalInvestment) * 100;
+            let sign = totalGainLoss >= 0 ? '+' : '';
+            let gainClass = totalGainLoss > 0 ? 'gain-positive' : (totalGainLoss < 0 ? 'gain-negative' : 'gain-neutral');
+            totalGainLossEl.className = `text-end ${gainClass}`;
+            totalGainLossEl.textContent = `${sign}${totalGainLoss.toFixed(2)}%`;
+        } else {
+            totalGainLossEl.textContent = '—';
+            totalGainLossEl.className = 'text-end gain-neutral';
+        }
+    }
 }
 
 function renderCharts(data) {
@@ -1189,9 +1429,10 @@ function renderCharts(data) {
     const labels = data.shareholders.map(s => s.name);
     const chartData = data.shareholders.map(s => s.currentPct);
     const bgColors = data.shareholders.map(s => {
-        if(s.type === 'Founder') return '#6366f1'; // Primary
-        if(s.type === 'ESOP') return '#f59e0b'; // Warning
-        return '#10b981'; // Success
+        if(s.type === 'Founder') return '#6366f1';
+        if(s.type === 'ESOP') return '#f59e0b';
+        if(s.type === 'Unallocated') return '#64748b';
+        return '#10b981';
     });
 
     // Ownership Chart
@@ -1223,26 +1464,26 @@ function renderCharts(data) {
         }
     });
 
-    // Valuation Chart (Bar/Line)
+    // Share Price Growth Chart
     const ctxVal = document.getElementById('valuationChart').getContext('2d');
     if(valuationChartInstance) valuationChartInstance.destroy();
     
     const timeLabels = data.timeline.map(t => t.round);
-    const valData = data.timeline.map(t => t.valuation);
+    const sharePriceData = data.timeline.map(t => t.sharePrice);
 
     valuationChartInstance = new Chart(ctxVal, {
         type: 'line',
         data: {
             labels: timeLabels,
             datasets: [{
-                label: 'Post-Money Valuation',
-                data: valData,
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                label: 'Share Price',
+                data: sharePriceData,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
                 borderWidth: 3,
                 tension: 0.4,
                 fill: true,
-                pointBackgroundColor: '#6366f1',
+                pointBackgroundColor: '#10b981',
                 pointRadius: 5
             }]
         },
@@ -1255,9 +1496,7 @@ function renderCharts(data) {
                     ticks: {
                         color: textColor,
                         callback: (val) => {
-                            if(val >= 10000000) return (val/10000000).toFixed(0) + 'Cr';
-                            if(val >= 1000000) return (val/1000000).toFixed(0) + 'M';
-                            return val;
+                            return formatCurrency(val, state.currency);
                         }
                     },
                     grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }
@@ -1271,20 +1510,12 @@ function renderCharts(data) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ` Val: ${formatCurrency(ctx.raw, state.currency)}`
+                        label: (ctx) => ` Share Price: ${formatCurrency(ctx.raw, state.currency)}`
                     }
                 }
             }
         }
     });
-}
-
-function showToast() {
-    const toastEl = document.getElementById('toastSuccess');
-    if(toastEl) {
-        const toast = new bootstrap.Toast(toastEl, { delay: 1500 });
-        toast.show();
-    }
 }
 
 // Run on load
