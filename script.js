@@ -372,8 +372,9 @@ window.startNewProfile = async () => {
 // Global API Helper
 async function apiCall(action, payload = {}) {
     payload.action = action;
-    if (action !== 'login' && action !== 'send_otp') {
-        payload.password = adminSessionPassword;
+    if (action !== 'send_otp') {
+        if (payload.gmail === undefined) payload.gmail = userGmailID;
+        if (payload.password === undefined) payload.password = adminSessionPassword;
     }
     
     try {
@@ -511,7 +512,7 @@ window.deleteProfile = async (name) => {
 
 // Event Listeners Setup
 function setupEventListeners() {
-    // Step 1: Gmail Input -> Send OTP
+    // Step 1: Gmail Input -> Check User or Send OTP
     document.getElementById('loginSendOtpBtn')?.addEventListener('click', async () => {
         const gmailInput = document.getElementById('loginGmailInput').value.trim();
         const err = document.getElementById('gmailError');
@@ -527,13 +528,46 @@ function setupEventListeners() {
 
         const btn = document.getElementById('loginSendOtpBtn');
         const origText = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
         btn.disabled = true;
 
         userGmailID = gmailInput;
-        mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
+        // Check if user exists in Sheets or localStorage
+        let userExists = false;
+        const localUsers = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+        if (localUsers[userGmailID]) {
+            userExists = true;
+        }
+
+        try {
+            const checkRes = await apiCall('check_user', { gmail: userGmailID });
+            if (checkRes && checkRes.status === 'success') {
+                userExists = checkRes.exists;
+            }
+        } catch (e) {
+            console.warn("Failed to check user existence in Cloud", e);
+        }
+
+        if (userExists) {
+            // Existing user -> Skip OTP, go straight to Enter Password
+            document.getElementById('loginStepGmail').classList.add('d-none');
+            document.getElementById('loginStepEnterPassword').classList.remove('d-none');
+            document.getElementById('loginEnterPasswordEmail').textContent = userGmailID;
+            document.getElementById('loginPasswordInput').value = '';
+            document.getElementById('passwordError').classList.add('d-none');
+            
+            btn.innerHTML = origText;
+            btn.disabled = false;
+            showToast("Welcome back! Please enter your password.");
+            return;
+        }
+
+        // New user -> Generate OTP and send email
+        mockOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
         let apiSuccess = false;
+        
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending OTP...';
         try {
             const res = await apiCall('send_otp', { gmail: userGmailID, otp: mockOtpCode });
             if (res && res.status === 'success') {
@@ -543,7 +577,7 @@ function setupEventListeners() {
             console.warn("Failed to send OTP via Apps Script API", e);
         }
 
-        // Transition to step 2
+        // Transition to step 2 (OTP Verification)
         document.getElementById('loginStepGmail').classList.add('d-none');
         document.getElementById('loginStepOtp').classList.remove('d-none');
         document.getElementById('otpError').classList.add('d-none');
@@ -601,7 +635,7 @@ function setupEventListeners() {
     });
 
     // Step 3: Set Password
-    document.getElementById('loginRegisterBtn')?.addEventListener('click', () => {
+    document.getElementById('loginRegisterBtn')?.addEventListener('click', async () => {
         const newPassword = document.getElementById('loginNewPasswordInput').value;
         const err = document.getElementById('setPasswordError');
         err.classList.add('d-none');
@@ -612,36 +646,86 @@ function setupEventListeners() {
             return;
         }
 
-        // Register user
-        const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
-        users[userGmailID] = newPassword;
-        localStorage.setItem('equitySimUsers', JSON.stringify(users));
+        const btn = document.getElementById('loginRegisterBtn');
+        const origText = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+        btn.disabled = true;
 
-        // Log in
-        isGuestMode = false;
-        adminSessionPassword = userGmailID; // Use Gmail ID as the key for sheets partitioning
-        afterLogin();
+        try {
+            // Register/Reset user password in Google Sheets database
+            const res = await apiCall('register', { gmail: userGmailID, password: newPassword });
+            if (res && res.status === 'success') {
+                // Register user locally as backup cache
+                const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+                users[userGmailID] = newPassword;
+                localStorage.setItem('equitySimUsers', JSON.stringify(users));
+
+                // Log in
+                isGuestMode = false;
+                adminSessionPassword = newPassword;
+                afterLogin();
+                showToast("Account successfully set up!");
+            } else {
+                err.textContent = (res && res.message) ? res.message : "Setting password failed. Please try again.";
+                err.classList.remove('d-none');
+            }
+        } catch (e) {
+            console.error("Registration error", e);
+            err.textContent = "Network error. Please try again.";
+            err.classList.remove('d-none');
+        }
+
+        btn.innerHTML = origText;
+        btn.disabled = false;
     });
 
     // Step 4: Submit Password
-    document.getElementById('loginSubmitPasswordBtn')?.addEventListener('click', () => {
+    document.getElementById('loginSubmitPasswordBtn')?.addEventListener('click', async () => {
         const passwordInput = document.getElementById('loginPasswordInput').value;
         const err = document.getElementById('passwordError');
         err.classList.add('d-none');
 
-        const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
-        const correctPassword = users[userGmailID];
+        const btn = document.getElementById('loginSubmitPasswordBtn');
+        const origText = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
+        btn.disabled = true;
 
-        if (passwordInput !== correctPassword) {
-            err.textContent = "Incorrect password.";
-            err.classList.remove('d-none');
-            return;
+        try {
+            // Verify password directly with Google Sheets database
+            const res = await apiCall('login', { gmail: userGmailID, password: passwordInput });
+            if (res && res.status === 'success') {
+                // Save user locally as backup cache
+                const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+                users[userGmailID] = passwordInput;
+                localStorage.setItem('equitySimUsers', JSON.stringify(users));
+
+                // Log in
+                isGuestMode = false;
+                adminSessionPassword = passwordInput;
+                afterLogin();
+                showToast("Successfully logged in!");
+            } else {
+                err.textContent = (res && res.message) ? res.message : "Incorrect password.";
+                err.classList.remove('d-none');
+            }
+        } catch (e) {
+            // Offline/fallback check using localStorage
+            console.warn("Login API failed, falling back to local credentials", e);
+            const users = JSON.parse(localStorage.getItem('equitySimUsers') || '{}');
+            const correctPassword = users[userGmailID];
+            if (correctPassword && passwordInput === correctPassword) {
+                isGuestMode = false;
+                adminSessionPassword = passwordInput;
+                afterLogin();
+                showToast("Logged in offline (local cache).");
+            } else {
+                err.textContent = "Incorrect password or network error.";
+                err.classList.remove('d-none');
+            }
         }
 
-        // Log in
-        isGuestMode = false;
-        adminSessionPassword = userGmailID; // Use Gmail ID as sheets partitioning key
-        afterLogin();
+        btn.innerHTML = origText;
+        btn.disabled = false;
     });
 
     // Theme Toggle Handlers
